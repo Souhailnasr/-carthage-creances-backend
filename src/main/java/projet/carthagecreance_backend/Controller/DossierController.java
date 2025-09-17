@@ -1,3 +1,4 @@
+// Fichier : src/main/java/projet/carthagecreance_backend/Controller/DossierController.java
 package projet.carthagecreance_backend.Controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.Service.DossierService;
-
+import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
@@ -21,17 +22,21 @@ public class DossierController {
     @Autowired
     private DossierService dossierService;
 
-    // CRUD Operations
+    // CRUD Operations - Modification de createDossier pour utiliser le DTO
     @PostMapping
-    public ResponseEntity<Dossier> createDossier(@RequestBody Dossier dossier) {
+    public ResponseEntity<?> createDossier(@RequestBody DossierRequest request) { // Changement ici
         try {
-            Dossier createdDossier = dossierService.createDossier(dossier);
+            // Appeler le service pour créer le dossier
+            Dossier createdDossier = dossierService.createDossier(request); // Changement ici
             return new ResponseEntity<>(createdDossier, HttpStatus.CREATED);
-        } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        } catch (IllegalArgumentException e) { // Attraper les exceptions spécifiques
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur lors de la création du dossier: " + e.getMessage());
         }
     }
 
+    // Les autres méthodes CRUD et de recherche restent inchangées
     @GetMapping("/{id}")
     public ResponseEntity<Dossier> getDossierById(@PathVariable Long id) {
         Optional<Dossier> dossier = dossierService.getDossierById(id);
@@ -46,9 +51,9 @@ public class DossierController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Dossier> updateDossier(@PathVariable Long id, @RequestBody Dossier dossier) {
+    public ResponseEntity<Dossier> updateDossier(@PathVariable Long id, @RequestBody Dossier dossierDetails) { // Peut rester Dossier pour mise à jour complète
         try {
-            Dossier updatedDossier = dossierService.updateDossier(id, dossier);
+            Dossier updatedDossier = dossierService.updateDossier(id, dossierDetails);
             return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
@@ -65,7 +70,7 @@ public class DossierController {
         }
     }
 
-    // Search Operations
+    // Search Operations (restent inchangées)
     @GetMapping("/number/{numeroDossier}")
     public ResponseEntity<Dossier> getDossierByNumber(@PathVariable String numeroDossier) {
         Optional<Dossier> dossier = dossierService.getDossierByNumber(numeroDossier);
@@ -151,7 +156,7 @@ public class DossierController {
 
     @GetMapping("/amount-range")
     public ResponseEntity<List<Dossier>> getDossiersByAmountRange(
-            @RequestParam Double minAmount, 
+            @RequestParam Double minAmount,
             @RequestParam Double maxAmount) {
         List<Dossier> dossiers = dossierService.getDossiersByAmountRange(minAmount, maxAmount);
         return new ResponseEntity<>(dossiers, HttpStatus.OK);

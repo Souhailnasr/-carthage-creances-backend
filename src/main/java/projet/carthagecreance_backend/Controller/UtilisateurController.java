@@ -1,9 +1,11 @@
+// Fichier : src/main/java/projet/carthagecreance_backend/Controller/UtilisateurController.java
 package projet.carthagecreance_backend.Controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import projet.carthagecreance_backend.Entity.RoleUtilisateur; // Ajout de l'import
 import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Service.UtilisateurService;
 
@@ -20,12 +22,12 @@ public class UtilisateurController {
 
     // CRUD Operations
     @PostMapping
-    public ResponseEntity<Utilisateur> createUtilisateur(@RequestBody Utilisateur utilisateur) {
+    public ResponseEntity<?> createUtilisateur(@RequestBody Utilisateur utilisateur) { // Changé pour ResponseEntity<?>
         try {
             Utilisateur createdUtilisateur = utilisateurService.createUtilisateur(utilisateur);
             return new ResponseEntity<>(createdUtilisateur, HttpStatus.CREATED);
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            return new ResponseEntity<>(HttpStatus.BAD_REQUEST); // Ou un message plus générique
         }
     }
 
@@ -43,10 +45,12 @@ public class UtilisateurController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Utilisateur> updateUtilisateur(@PathVariable Long id, @RequestBody Utilisateur utilisateur) {
+    public ResponseEntity<?> updateUtilisateur(@PathVariable Long id, @RequestBody Utilisateur utilisateur) { // Changé pour ResponseEntity<?>
         try {
             Utilisateur updatedUtilisateur = utilisateurService.updateUtilisateur(id, utilisateur);
             return new ResponseEntity<>(updatedUtilisateur, HttpStatus.OK);
+        } catch (IllegalArgumentException e) { // Attraper IllegalArgumentException
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
@@ -77,7 +81,7 @@ public class UtilisateurController {
 
     @GetMapping("/search/fullname")
     public ResponseEntity<List<Utilisateur>> getUtilisateursByFullName(
-            @RequestParam String name, 
+            @RequestParam String name,
             @RequestParam String firstName) {
         List<Utilisateur> utilisateurs = utilisateurService.getUtilisateursByFullName(name, firstName);
         return new ResponseEntity<>(utilisateurs, HttpStatus.OK);
@@ -106,6 +110,20 @@ public class UtilisateurController {
     public ResponseEntity<List<Utilisateur>> getUtilisateursWithoutDossiers() {
         List<Utilisateur> utilisateurs = utilisateurService.getUtilisateursWithoutDossiers();
         return new ResponseEntity<>(utilisateurs, HttpStatus.OK);
+    }
+
+    // >>>>>>>>> NOUVELLE MÉTHODE : Recherche par rôle <<<<<<<<<
+    @GetMapping("/role/{roleUtilisateur}")
+    public ResponseEntity<List<Utilisateur>> getUtilisateursByRoleUtilisateur(@PathVariable RoleUtilisateur roleUtilisateur) {
+        try {
+            // Le framework Spring convertira automatiquement la chaîne de l'URL en enum RoleUtilisateur
+            // Ex: /api/utilisateurs/role/ADMIN -> roleUtilisateur = RoleUtilisateur.ADMIN
+            List<Utilisateur> utilisateurs = utilisateurService.getUtilisateursByRoleUtilisateur(roleUtilisateur);
+            return new ResponseEntity<>(utilisateurs, HttpStatus.OK);
+        } catch (Exception e) {
+            // Gestion d'erreur générique, pourrait être plus spécifique
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     // Authentication Operations

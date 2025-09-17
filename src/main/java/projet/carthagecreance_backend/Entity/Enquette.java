@@ -73,7 +73,7 @@ public class Enquette implements Serializable {
     private String marques;
     private String groupe;
 
-    @OneToOne
-    @JoinColumn(name = "dossier_id")  // clé étrangère
+    @OneToOne(optional = false) // Rend la relation obligatoire côté Java aussi
+    @JoinColumn(name = "dossier_id", nullable = false) // Clé étrangère, non null
     private Dossier dossier;
 }

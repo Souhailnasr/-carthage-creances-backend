@@ -16,6 +16,7 @@ public interface CreancierService {
     
     // Search Operations
     Optional<Creancier> getCreancierByCode(String codeCreancier);
+    Optional<Creancier> getCreancierByCodeCreance(String codeCreance);
     List<Creancier> getCreanciersByName(String name);
     List<Creancier> getCreanciersByFirstName(String firstName);
     List<Creancier> getCreanciersByFullName(String name, String firstName);
@@ -30,4 +31,5 @@ public interface CreancierService {
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
     boolean existsByCode(String codeCreancier);
+    boolean existsByCodeCreance(String codeCreance);
 }

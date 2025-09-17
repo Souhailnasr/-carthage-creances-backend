@@ -39,7 +39,11 @@ public class Dossier implements Serializable {
 
     @Enumerated(EnumType.STRING)
     private Urgence urgence;
+    @Enumerated(EnumType.STRING)
+    private DossierStatus dossierStatus;
 
+    @Enumerated(EnumType.STRING)
+    private TypeDocumentJustificatif typeDocumentJustificatif;
     // Utilisateurs associés
     @ManyToMany
 
@@ -64,10 +68,13 @@ public class Dossier implements Serializable {
     @OneToOne(mappedBy = "dossier", cascade = CascadeType.ALL)
     private Finance finance;
 
-    @OneToOne(cascade = CascadeType.ALL, optional = false)
+    // Relations : Many Dossiers to One Creancier/Debiteur
+    @ManyToOne(optional = false) // Le dossier doit avoir un créancier
+    @JoinColumn(name = "creancier_id", nullable = false) // Colonne FK dans la table Dossier
     private Creancier creancier;
 
-    @OneToOne(cascade = CascadeType.ALL, optional = false)
+    @ManyToOne(optional = false) // Le dossier doit avoir un débiteur
+    @JoinColumn(name = "debiteur_id", nullable = false) // Colonne FK dans la table Dossier
     private Debiteur debiteur;
 
     // Actions (1 ou plusieurs)
@@ -77,17 +84,19 @@ public class Dossier implements Serializable {
 
 
     // Initialiser la date de création automatiquement
+    @PrePersist
     protected void onCreate() {
         dateCreation = new java.util.Date();
     }
+    /*
 
     // Valider les pièces et attributs obligatoires
-    @PrePersist
-    @PreUpdate
-    private void validateDossier() {
+     @PrePersist
+      @PreUpdate
+     private void validateDossier() {
         if (numeroDossier == null || montantCreance == null || contratSigne == null || pouvoir == null) {
-            throw new RuntimeException("Le numéro de dossier, le montant et toutes les pièces sont obligatoires.");
+             throw new RuntimeException("Le numéro de dossier, le montant et toutes les pièces sont obligatoires.");
         }
-    }
+    } */
 }
 

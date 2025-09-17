@@ -36,6 +36,8 @@ public class Huissier implements Serializable {
     private String telephone;
 
     private String specialite;
+    private String adresse;
+
 
     @OneToMany(mappedBy = "huissier")
     private List<Dossier> dossiers;

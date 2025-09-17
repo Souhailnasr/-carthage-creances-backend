@@ -36,6 +36,7 @@ public class Avocat implements Serializable {
     private String telephone;
 
     private String specialite;
+    private String adresse;
 
     @OneToMany(mappedBy = "avocat")
     private List<Dossier> dossiers;

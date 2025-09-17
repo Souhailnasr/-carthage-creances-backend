@@ -54,6 +54,11 @@ public class CreancierServiceImpl implements CreancierService {
     }
 
     @Override
+    public Optional<Creancier> getCreancierByCodeCreance(String codeCreance) {
+        return creancierRepository.findByCodeCreance(codeCreance);
+    }
+
+    @Override
     public List<Creancier> getCreanciersByName(String name) {
         return creancierRepository.findByNomContainingIgnoreCase(name);
     }
@@ -111,5 +116,10 @@ public class CreancierServiceImpl implements CreancierService {
     @Override
     public boolean existsByCode(String codeCreancier) {
         return creancierRepository.existsByCodeCreancier(codeCreancier);
+    }
+
+    @Override
+    public boolean existsByCodeCreance(String codeCreance) {
+        return creancierRepository.existsByCodeCreance(codeCreance);
     }
 }

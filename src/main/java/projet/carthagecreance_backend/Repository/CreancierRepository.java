@@ -15,6 +15,9 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     // Rechercher par code créancier
     Optional<Creancier> findByCodeCreancier(String codeCreancier);
     
+    // Rechercher par code créance
+    Optional<Creancier> findByCodeCreance(String codeCreance);
+    
     // Rechercher par nom
     List<Creancier> findByNomContainingIgnoreCase(String nom);
     
@@ -49,10 +52,14 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     // Vérifier l'existence par code créancier
     boolean existsByCodeCreancier(String codeCreancier);
     
+    // Vérifier l'existence par code créance
+    boolean existsByCodeCreance(String codeCreance);
+    
     // Rechercher par ville et code postal
     List<Creancier> findByVilleAndCodePostal(String ville, String codePostal);
     
     // Compter les créanciers par ville
     @Query("SELECT c.ville, COUNT(c) FROM Creancier c WHERE c.ville IS NOT NULL GROUP BY c.ville ORDER BY COUNT(c) DESC")
     List<Object[]> compterCreanciersParVille();
+
 }

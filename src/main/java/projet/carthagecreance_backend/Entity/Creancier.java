@@ -7,6 +7,8 @@ import jakarta.validation.constraints.Pattern;
 import lombok.*;
 
 import java.io.Serializable;
+import java.util.List;
+
 @Entity
 @Getter
 @Setter
@@ -21,7 +23,12 @@ public class Creancier implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Le code créancier est obligatoire")
     private String codeCreancier;
+    
+    @NotBlank(message = "Le code créance est obligatoire")
+    private String codeCreance;
+
     @NotBlank(message = "Le nom est obligatoire")
     private String nom;
     @NotBlank(message = "Le prénom est obligatoire")
@@ -37,7 +44,8 @@ public class Creancier implements Serializable {
     @NotBlank(message = "L'email est obligatoire")
     private String email;
 
-    @OneToOne(mappedBy = "creancier")
-    private Dossier dossier;
+    // Relation corrigée : Un créancier peut avoir plusieurs dossiers
+    @OneToMany(mappedBy = "creancier") // mappedBy pointe vers le champ 'creancier' dans Dossier
+    private List<Dossier> dossiers; // Liste des dossiers de ce créancier
 }
 
