@@ -18,6 +18,9 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     // Rechercher par code créance
     Optional<Creancier> findByCodeCreance(String codeCreance);
     
+    // Rechercher par nom exact
+    Optional<Creancier> findByNom(String nom);
+    
     // Rechercher par nom
     List<Creancier> findByNomContainingIgnoreCase(String nom);
     

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import projet.carthagecreance_backend.Entity.Dossier;
+import projet.carthagecreance_backend.Entity.DossierStatus;
 import projet.carthagecreance_backend.Entity.Urgence;
 
 import java.util.Date;
@@ -113,4 +114,27 @@ public interface DossierRepository extends JpaRepository<Dossier, Long> {
     // Rechercher les dossiers avec actions
     @Query("SELECT d FROM Dossier d WHERE SIZE(d.actions) > 0")
     List<Dossier> findDossiersAvecActions();
+    
+    // ==================== Nouvelles méthodes pour le workflow ====================
+    
+    // Rechercher par statut de dossier
+    List<Dossier> findByDossierStatus(DossierStatus dossierStatus);
+    
+    // Rechercher par agent créateur
+    @Query("SELECT d FROM Dossier d WHERE d.agentCreateur.id = :agentId")
+    List<Dossier> findByAgentCreateurId(@Param("agentId") Long agentId);
+    
+    // Compter par statut de dossier
+    long countByDossierStatus(DossierStatus dossierStatus);
+    
+    // Compter par date de création après une date
+    long countByDateCreationAfter(Date date);
+    
+    // Compter par utilisateur
+    @Query("SELECT COUNT(d) FROM Dossier d JOIN d.utilisateurs u WHERE u.id = :utilisateurId")
+    long countByUtilisateurId(@Param("utilisateurId") Long utilisateurId);
+    
+    // Compter par agent créateur
+    @Query("SELECT COUNT(d) FROM Dossier d WHERE d.agentCreateur.id = :agentId")
+    long countByAgentCreateurId(@Param("agentId") Long agentId);
 }

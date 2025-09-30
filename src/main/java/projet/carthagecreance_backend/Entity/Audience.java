@@ -1,5 +1,6 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -32,6 +33,7 @@ public class Audience implements Serializable {
 
     @ManyToOne
     @JoinColumn(name = "dossier_id")
+    @JsonIgnore // Évite la récursion infinie
     private Dossier dossier;
 
     @ManyToOne

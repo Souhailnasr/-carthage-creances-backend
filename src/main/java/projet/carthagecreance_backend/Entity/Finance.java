@@ -1,5 +1,6 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,10 +31,12 @@ public class Finance implements Serializable {
     // ✅ Relation avec Dossier
     @OneToOne
     @JoinColumn(name = "dossier_id")
+    @JsonIgnore // Évite la récursion infinie
     private Dossier dossier;
 
     // ✅ Liste des Actions liées à cette Finance
     @OneToMany(mappedBy = "finance", cascade = CascadeType.ALL)
+    @JsonIgnore // Évite la récursion infinie
     private List<Action> actions;
 
     // ✅ Calcul total des frais des actions

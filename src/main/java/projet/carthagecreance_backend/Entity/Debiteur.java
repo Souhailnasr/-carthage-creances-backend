@@ -1,5 +1,6 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -30,7 +31,6 @@ public class Debiteur implements Serializable {
     private String adresseElue;
     private String ville;
     private String codePostal;
-    @NotBlank(message = "Le téléphone est obligatoire")
     @Pattern(regexp = "\\d{8}", message = "Le téléphone doit contenir exactement 8 chiffres")
     private String telephone;
     private String fax;
@@ -39,6 +39,7 @@ public class Debiteur implements Serializable {
     private String email;
     // Relation corrigée : Un débiteur peut avoir plusieurs dossiers
     @OneToMany(mappedBy = "debiteur") // mappedBy pointe vers le champ 'debiteur' dans Dossier
+    @JsonIgnore
     private List<Dossier> dossiers; // Liste des dossiers de ce débiteur
 
 

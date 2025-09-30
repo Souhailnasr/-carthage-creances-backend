@@ -1,11 +1,13 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.io.Serializable;
 import java.time.LocalDate;
 
 @Entity
+@Table(name = "actions")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -32,11 +34,13 @@ public class Action implements Serializable {
     // Relation avec le Dossier
     @ManyToOne
     @JoinColumn(name = "dossier_id")
+    @JsonIgnore // Évite la récursion infinie
     private Dossier dossier;
 
     // Relation avec Finance (pour le regroupement des frais)
     @ManyToOne
     @JoinColumn(name = "finance_id")
+    @JsonIgnore // Évite la récursion infinie
     private Finance finance;
 
     // ✅ Méthode utilitaire pour calculer le coût total de cette action

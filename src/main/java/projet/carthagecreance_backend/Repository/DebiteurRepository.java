@@ -15,6 +15,9 @@ public interface DebiteurRepository extends JpaRepository<Debiteur, Long> {
     // Rechercher par code créance
     Optional<Debiteur> findByCodeCreance(String codeCreance);
     
+    // Rechercher par nom exact
+    Optional<Debiteur> findByNom(String nom);
+    
     // Rechercher par nom
     List<Debiteur> findByNomContainingIgnoreCase(String nom);
     

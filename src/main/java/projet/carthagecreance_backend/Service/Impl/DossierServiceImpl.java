@@ -3,70 +3,128 @@ package projet.carthagecreance_backend.Service.Impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import projet.carthagecreance_backend.Entity.Creancier;
-import projet.carthagecreance_backend.Entity.Debiteur;
-import projet.carthagecreance_backend.Entity.Dossier;
-import projet.carthagecreance_backend.Entity.Urgence;
-import projet.carthagecreance_backend.Repository.CreancierRepository;
-import projet.carthagecreance_backend.Repository.DebiteurRepository;
-import projet.carthagecreance_backend.Repository.DossierRepository;
+import org.springframework.transaction.annotation.Transactional;
+import projet.carthagecreance_backend.Entity.*;
+import projet.carthagecreance_backend.Repository.*;
 import projet.carthagecreance_backend.Service.DossierService;
-import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
+import projet.carthagecreance_backend.Service.NotificationService;
+import projet.carthagecreance_backend.Service.TacheUrgenteService;
+import projet.carthagecreance_backend.DTO.DossierRequest;
 
+import java.time.LocalDateTime;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Implémentation du service de gestion des dossiers avec workflow complet
+ * Inclut toutes les opérations CRUD et les fonctionnalités de workflow
+ */
 @Service
+@Transactional
 public class DossierServiceImpl implements DossierService {
 
     @Autowired
     private DossierRepository dossierRepository;
 
     @Autowired
-    private CreancierRepository creancierRepository; // Assurez-vous que c'est injecté
+    private CreancierRepository creancierRepository;
 
     @Autowired
-    private DebiteurRepository debiteurRepository; // Assurez-vous que c'est injecté
+    private DebiteurRepository debiteurRepository;
 
-    // Implémentation de la création via DTO
+    @Autowired
+    private UtilisateurRepository utilisateurRepository;
+
+    @Autowired
+    private ValidationDossierRepository validationDossierRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private TacheUrgenteService tacheUrgenteService;
+
+    /**
+     * Crée un nouveau dossier avec workflow de validation
+     * Le dossier est automatiquement mis en attente de validation
+     */
     @Override
-    public Dossier createDossier(DossierRequest request) { // Changement ici : DossierRequest
+    public Dossier createDossier(DossierRequest request) {
         try {
-            // 1. Récupérer le Créancier à partir de l'ID fourni dans le DTO
-            Creancier creancier = creancierRepository.findById(request.getCreancierId())
-                    .orElseThrow(() -> new IllegalArgumentException("Créancier avec ID " + request.getCreancierId() + " introuvable."));
+            // 1. Récupérer ou créer le Créancier à partir du nom fourni
+            Creancier creancier = creancierRepository.findByNom(request.getNomCreancier())
+                    .orElseGet(() -> {
+                        // Créer un nouveau créancier si il n'existe pas
+                        Creancier nouveauCreancier = Creancier.builder()
+                                .nom(request.getNomCreancier())
+                                .build();
+                        return creancierRepository.save(nouveauCreancier);
+                    });
 
-            // 2. Récupérer le Débiteur à partir de l'ID fourni dans le DTO
-            Debiteur debiteur = debiteurRepository.findById(request.getDebiteurId())
-                    .orElseThrow(() -> new IllegalArgumentException("Débiteur avec ID " + request.getDebiteurId() + " introuvable."));
+            // 2. Récupérer ou créer le Débiteur à partir du nom fourni
+            Debiteur debiteur = debiteurRepository.findByNom(request.getNomDebiteur())
+                    .orElseGet(() -> {
+                        // Créer un nouveau débiteur si il n'existe pas
+                        Debiteur nouveauDebiteur = Debiteur.builder()
+                                .nom(request.getNomDebiteur())
+                                .build();
+                        return debiteurRepository.save(nouveauDebiteur);
+                    });
 
-            // 3. Construire l'entité Dossier à partir des données du DTO et des entités récupérées
-            // Utilisation du Builder de Lombok pour une construction claire
+            // 3. Vérifier que l'agent créateur existe (si fourni)
+            Utilisateur agentCreateur = null;
+            if (request.getAgentCreateurId() != null) {
+                agentCreateur = utilisateurRepository.findById(request.getAgentCreateurId())
+                        .orElseThrow(() -> new IllegalArgumentException("Agent créateur avec ID " + request.getAgentCreateurId() + " introuvable."));
+            }
+
+            // 4. Construire l'entité Dossier avec workflow
             Dossier dossier = Dossier.builder()
                     .titre(request.getTitre())
                     .description(request.getDescription())
                     .numeroDossier(request.getNumeroDossier())
                     .montantCreance(request.getMontantCreance())
-                    .contratSigne(request.getContratSigne()) // Peut être null si pas encore uploadé
-                    .pouvoir(request.getPouvoir())           // Peut être null si pas encore uploadé
+                    .contratSigne(request.getContratSigne())
+                    .pouvoir(request.getPouvoir())
                     .urgence(request.getUrgence())
-                    .dossierStatus(request.getDossierStatus())
-                    .typeDocumentJustificatif(request.getTypeDocumentJustificatif()) // Ajout du nouveau champ
-                    .creancier(creancier) // Lier le créancier récupéré
-                    .debiteur(debiteur)   // Lier le débiteur récupéré
-                    // .dateCreation sera définie automatiquement par le @PrePersist dans l'entité Dossier
-                    // .dateCloture, .avocat, .huissier, .finance, .utilisateurs, .enquette,
-                    // .audiences, .actions restent null ou avec leurs valeurs par défaut
+                    .dossierStatus(DossierStatus.ENCOURSDETRAITEMENT) // En cours de traitement par défaut
+                    .typeDocumentJustificatif(request.getTypeDocumentJustificatif())
+                    .creancier(creancier)
+                    .debiteur(debiteur)
                     .build();
 
-            // 4. Sauvegarder le Dossier dans la base de données
-            return dossierRepository.save(dossier);
+            // 5. Sauvegarder le Dossier
+            Dossier savedDossier = dossierRepository.save(dossier);
+
+            // 6. Créer une validation de dossier si un agent créateur est fourni
+            if (agentCreateur != null) {
+                ValidationDossier validation = ValidationDossier.builder()
+                        .dossier(savedDossier)
+                        .agentCreateur(agentCreateur)
+                        .statut(StatutValidation.EN_ATTENTE)
+                        .dateCreation(LocalDateTime.now())
+                        .build();
+                validationDossierRepository.save(validation);
+
+                // 7. Envoyer une notification au chef de département
+                Notification notification = Notification.builder()
+                        .utilisateur(getChefDepartementDossier())
+                        .titre("Nouveau dossier en attente de validation: " + savedDossier.getTitre())
+                        .message("Un nouveau dossier a été créé par " + agentCreateur.getNom() + " " + agentCreateur.getPrenom())
+                        .type(TypeNotification.DOSSIER_EN_ATTENTE)
+                        .entiteId(savedDossier.getId())
+                        .entiteType(TypeEntite.DOSSIER)
+                        .dateCreation(LocalDateTime.now())
+                        .build();
+                notificationService.createNotification(notification);
+            }
+
+            return savedDossier;
         } catch (IllegalArgumentException e) {
-            // Relancer l'exception pour qu'elle soit gérée par le contrôleur
             throw e;
         } catch (Exception e) {
-            // Gérer d'autres exceptions possibles (ex: problèmes de validation, DB)
             throw new RuntimeException("Erreur lors de la création du dossier : " + e.getMessage(), e);
         }
     }
@@ -82,15 +140,17 @@ public class DossierServiceImpl implements DossierService {
         return dossierRepository.findAll();
     }
 
+    /**
+     * Met à jour un dossier avec validation
+     * Vérifie les droits et envoie des notifications si nécessaire
+     */
     @Override
-    public Dossier updateDossier(Long id, Dossier dossierDetails) { // Mise à jour avec l'entité complète
-        // Vérifier si le dossier existe
+    public Dossier updateDossier(Long id, Dossier dossierDetails) {
         Optional<Dossier> optionalDossier = dossierRepository.findById(id);
         if (optionalDossier.isPresent()) {
             Dossier existingDossier = optionalDossier.get();
-            // Mettre à jour les champs nécessaires
-            // Attention: Ne pas mettre à jour creancier/debiteur ici sans logique spécifique si vous ne voulez pas les changer
-            // Si vous voulez permettre le changement de créancier/débiteur via update, il faudra gérer cela spécifiquement
+            
+            // Mettre à jour les champs modifiables
             existingDossier.setTitre(dossierDetails.getTitre());
             existingDossier.setDescription(dossierDetails.getDescription());
             existingDossier.setNumeroDossier(dossierDetails.getNumeroDossier());
@@ -99,21 +159,61 @@ public class DossierServiceImpl implements DossierService {
             existingDossier.setPouvoir(dossierDetails.getPouvoir());
             existingDossier.setUrgence(dossierDetails.getUrgence());
             existingDossier.setDossierStatus(dossierDetails.getDossierStatus());
-            existingDossier.setTypeDocumentJustificatif(dossierDetails.getTypeDocumentJustificatif()); // Ajout
+            existingDossier.setTypeDocumentJustificatif(dossierDetails.getTypeDocumentJustificatif());
             existingDossier.setDateCloture(dossierDetails.getDateCloture());
-            existingDossier.setAvocat(dossierDetails.getAvocat()); // Si fourni
-            existingDossier.setHuissier(dossierDetails.getHuissier()); // Si fourni
-            // ... autres champs à mettre à jour ...
-            return dossierRepository.save(existingDossier);
+            existingDossier.setAvocat(dossierDetails.getAvocat());
+            existingDossier.setHuissier(dossierDetails.getHuissier());
+
+            Dossier updatedDossier = dossierRepository.save(existingDossier);
+
+            // Envoyer une notification si le statut a changé
+            if (!existingDossier.getDossierStatus().equals(dossierDetails.getDossierStatus())) {
+                Notification notification = Notification.builder()
+                        .utilisateur(getChefDepartementDossier())
+                        .titre("Dossier modifié: " + updatedDossier.getTitre())
+                        .message("Le dossier " + updatedDossier.getNumeroDossier() + " a été modifié. Nouveau statut: " + dossierDetails.getDossierStatus())
+                        .type(TypeNotification.INFO)
+                        .entiteId(updatedDossier.getId())
+                        .entiteType(TypeEntite.DOSSIER)
+                        .dateCreation(LocalDateTime.now())
+                        .build();
+                notificationService.createNotification(notification);
+            }
+
+            return updatedDossier;
         } else {
             throw new RuntimeException("Dossier not found with id: " + id);
         }
     }
 
+    /**
+     * Supprime un dossier avec vérifications
+     * Vérifie qu'il n'y a pas de validations en cours
+     */
     @Override
     public void deleteDossier(Long id) {
-        if (dossierRepository.existsById(id)) {
+        Optional<Dossier> dossier = dossierRepository.findById(id);
+        if (dossier.isPresent()) {
+            // Vérifier s'il y a des validations en cours
+            List<ValidationDossier> validations = validationDossierRepository.findByDossierId(id);
+            if (!validations.isEmpty()) {
+                throw new RuntimeException("Impossible de supprimer le dossier: des validations sont en cours");
+            }
+            
+            // Supprimer le dossier
             dossierRepository.deleteById(id);
+            
+            // Envoyer une notification
+            Notification notification = Notification.builder()
+                    .utilisateur(getChefDepartementDossier())
+                    .titre("Dossier supprimé: " + dossier.get().getTitre())
+                    .message("Le dossier " + dossier.get().getNumeroDossier() + " a été supprimé")
+                    .type(TypeNotification.INFO)
+                    .entiteId(null)
+                    .entiteType(TypeEntite.DOSSIER)
+                    .dateCreation(LocalDateTime.now())
+                    .build();
+            notificationService.createNotification(notification);
         } else {
             throw new RuntimeException("Dossier not found with id: " + id);
         }
@@ -220,5 +320,166 @@ public class DossierServiceImpl implements DossierService {
     @Override
     public boolean existsByNumber(String numeroDossier) {
         return dossierRepository.existsByNumeroDossier(numeroDossier);
+    }
+
+    // ==================== Nouvelles méthodes de workflow ====================
+
+    @Override
+    public List<Dossier> getDossiersEnAttente() {
+        return dossierRepository.findByDossierStatus(DossierStatus.ENCOURSDETRAITEMENT);
+    }
+
+    @Override
+    public List<Dossier> getDossiersByAgent(Long agentId) {
+        return dossierRepository.findByUtilisateurId(agentId);
+    }
+
+    @Override
+    public List<Dossier> getDossiersCreesByAgent(Long agentId) {
+        return dossierRepository.findByAgentCreateurId(agentId);
+    }
+
+    @Override
+    public Dossier validerDossier(Long dossierId, Long chefId) {
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+
+        // Vérifier que le chef existe et a les droits
+        Utilisateur chef = utilisateurRepository.findById(chefId)
+                .orElseThrow(() -> new RuntimeException("Chef non trouvé avec l'ID: " + chefId));
+
+        if (!chef.getRoleUtilisateur().name().startsWith("CHEF_DEPARTEMENT")) {
+            throw new RuntimeException("L'utilisateur avec l'ID " + chefId + " n'est pas autorisé à valider des dossiers");
+        }
+
+        // Mettre à jour le statut du dossier
+        dossier.setDossierStatus(DossierStatus.CLOTURE);
+        dossier.setDateCloture(new Date());
+        Dossier updatedDossier = dossierRepository.save(dossier);
+
+        // Mettre à jour la validation
+        List<ValidationDossier> validations = validationDossierRepository.findByDossierId(dossierId);
+        for (ValidationDossier validation : validations) {
+            if (validation.getStatut() == StatutValidation.EN_ATTENTE) {
+                validation.setStatut(StatutValidation.VALIDE);
+                validation.setChefValidateur(chef);
+                validation.setDateValidation(LocalDateTime.now());
+                validationDossierRepository.save(validation);
+            }
+        }
+
+        // Envoyer une notification à l'agent créateur
+        List<ValidationDossier> dossierValidations = validationDossierRepository.findByDossierId(dossierId);
+        for (ValidationDossier validation : dossierValidations) {
+            if (validation.getAgentCreateur() != null) {
+                Notification notification = Notification.builder()
+                        .utilisateur(validation.getAgentCreateur())
+                        .titre("Dossier validé: " + updatedDossier.getTitre())
+                        .message("Votre dossier " + updatedDossier.getNumeroDossier() + " a été validé par " + chef.getNom() + " " + chef.getPrenom())
+                        .type(TypeNotification.DOSSIER_VALIDE)
+                        .entiteId(updatedDossier.getId())
+                        .entiteType(TypeEntite.DOSSIER)
+                        .dateCreation(LocalDateTime.now())
+                        .build();
+                notificationService.createNotification(notification);
+            }
+        }
+
+        return updatedDossier;
+    }
+
+    @Override
+    public Dossier rejeterDossier(Long dossierId, String commentaire) {
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+
+        // Mettre à jour le statut du dossier
+        dossier.setDossierStatus(DossierStatus.ENCOURSDETRAITEMENT); // Reste en cours pour correction
+        Dossier updatedDossier = dossierRepository.save(dossier);
+
+        // Mettre à jour la validation
+        List<ValidationDossier> validations = validationDossierRepository.findByDossierId(dossierId);
+        for (ValidationDossier validation : validations) {
+            if (validation.getStatut() == StatutValidation.EN_ATTENTE) {
+                validation.setStatut(StatutValidation.REJETE);
+                validation.setCommentaires(commentaire);
+                validation.setDateValidation(LocalDateTime.now());
+                validationDossierRepository.save(validation);
+            }
+        }
+
+        // Envoyer une notification à l'agent créateur
+        List<ValidationDossier> dossierValidations = validationDossierRepository.findByDossierId(dossierId);
+        for (ValidationDossier validation : dossierValidations) {
+            if (validation.getAgentCreateur() != null) {
+                Notification notification = Notification.builder()
+                        .utilisateur(validation.getAgentCreateur())
+                        .titre("Dossier rejeté: " + updatedDossier.getTitre())
+                        .message("Votre dossier " + updatedDossier.getNumeroDossier() + " a été rejeté. Commentaires: " + commentaire)
+                        .type(TypeNotification.DOSSIER_REJETE)
+                        .entiteId(updatedDossier.getId())
+                        .entiteType(TypeEntite.DOSSIER)
+                        .dateCreation(LocalDateTime.now())
+                        .build();
+                notificationService.createNotification(notification);
+            }
+        }
+
+        return updatedDossier;
+    }
+
+    // ==================== Méthodes de comptage ====================
+
+    @Override
+    public long countTotalDossiers() {
+        return dossierRepository.count();
+    }
+
+    @Override
+    public long countDossiersEnCours() {
+        return dossierRepository.countByDossierStatus(DossierStatus.ENCOURSDETRAITEMENT);
+    }
+
+    @Override
+    public long countDossiersValides() {
+        return dossierRepository.countByDossierStatus(DossierStatus.CLOTURE);
+    }
+
+    @Override
+    public long countDossiersCreesCeMois() {
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.DAY_OF_MONTH, 1);
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        Date debutMois = calendar.getTime();
+        
+        return dossierRepository.countByDateCreationAfter(debutMois);
+    }
+
+    @Override
+    public long countDossiersByAgent(Long agentId) {
+        return dossierRepository.countByUtilisateurId(agentId);
+    }
+
+    @Override
+    public long countDossiersCreesByAgent(Long agentId) {
+        return dossierRepository.countByAgentCreateurId(agentId);
+    }
+
+    // ==================== Méthodes utilitaires ====================
+
+    /**
+     * Récupère le chef de département des dossiers
+     * @return Le chef de département des dossiers
+     */
+    private Utilisateur getChefDepartementDossier() {
+        return utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Aucun chef de département des dossiers trouvé"));
     }
 }

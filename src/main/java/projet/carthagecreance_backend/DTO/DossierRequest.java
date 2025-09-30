@@ -18,6 +18,7 @@ public class DossierRequest {
     private Urgence urgence;
     private DossierStatus dossierStatus;
     private TypeDocumentJustificatif typeDocumentJustificatif; // Ajout
-    private Long creancierId; // ID du créancier existant
-    private Long debiteurId;  // ID du débiteur existant
+    private String nomCreancier; // Nom du créancier
+    private String nomDebiteur;  // Nom du débiteur
+    private Long agentCreateurId; // ID de l'agent créateur (optionnel)
 }

@@ -1,10 +1,14 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Getter
@@ -75,5 +79,37 @@ public class Enquette implements Serializable {
 
     @OneToOne(optional = false) // Rend la relation obligatoire côté Java aussi
     @JoinColumn(name = "dossier_id", nullable = false) // Clé étrangère, non null
+    @JsonIgnore // Évite la récursion infinie
     private Dossier dossier;
+
+    // Relations avec les utilisateurs
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_createur_id")
+    private Utilisateur agentCreateur;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_responsable_id")
+    private Utilisateur agentResponsable;
+
+    // Propriétés de validation
+    @Column(name = "valide")
+    @Builder.Default
+    private Boolean valide = false;
+
+    @Column(name = "date_validation")
+    private LocalDateTime dateValidation;
+
+    @Column(name = "commentaire_validation", length = 1000)
+    private String commentaireValidation;
+
+    // Relations avec les nouvelles entités
+    @OneToMany(mappedBy = "enquete", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonIgnore // Évite la récursion infinie
+    private List<ValidationEnquete> validations = new ArrayList<>();
+
+    @OneToMany(mappedBy = "enquete", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonIgnore // Évite la récursion infinie
+    private List<TacheUrgente> tachesUrgentes = new ArrayList<>();
 }

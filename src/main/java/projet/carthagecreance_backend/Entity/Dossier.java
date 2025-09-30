@@ -1,9 +1,12 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -51,10 +54,12 @@ public class Dossier implements Serializable {
 
     // Enquête (exactement 1)
     @OneToOne(mappedBy = "dossier", cascade = CascadeType.ALL)
+    @JsonIgnore // Évite la récursion infinie
     private Enquette enquette;
 
     // Audiences (1 ou plusieurs)
     @OneToMany(mappedBy = "dossier", cascade = CascadeType.ALL)
+    @JsonIgnore // Évite la récursion infinie
     private List<Audience> audiences;
 
     // Avocat et Huissier (optionnels)
@@ -66,6 +71,7 @@ public class Dossier implements Serializable {
 
     // Finance, Créancier et Débiteur
     @OneToOne(mappedBy = "dossier", cascade = CascadeType.ALL)
+    @JsonIgnore // Évite la récursion infinie
     private Finance finance;
 
     // Relations : Many Dossiers to One Creancier/Debiteur
@@ -79,8 +85,8 @@ public class Dossier implements Serializable {
 
     // Actions (1 ou plusieurs)
     @OneToMany(mappedBy = "dossier", cascade = CascadeType.ALL)
+    @JsonIgnore // Évite la récursion infinie
     private List<Action> actions;
-
 
 
     // Initialiser la date de création automatiquement
@@ -88,6 +94,35 @@ public class Dossier implements Serializable {
     protected void onCreate() {
         dateCreation = new java.util.Date();
     }
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_createur_id")
+    private Utilisateur agentCreateur;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agent_responsable_id")
+    private Utilisateur agentResponsable;
+
+    @Column(name = "valide")
+    @Builder.Default
+    private Boolean valide = false;
+
+    @Column(name = "date_validation")
+    private LocalDateTime dateValidation;
+
+    @Column(name = "commentaire_validation", length = 1000)
+    private String commentaireValidation;
+
+    // Relations avec les nouvelles entités
+    @OneToMany(mappedBy = "dossier", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonIgnore // Évite la récursion infinie
+    private List<ValidationDossier> validations = new ArrayList<>();
+
+    @OneToMany(mappedBy = "dossier", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonIgnore // Évite la récursion infinie
+    private List<TacheUrgente> tachesUrgentes = new ArrayList<>();
+}
     /*
 
     // Valider les pièces et attributs obligatoires
@@ -98,5 +133,5 @@ public class Dossier implements Serializable {
              throw new RuntimeException("Le numéro de dossier, le montant et toutes les pièces sont obligatoires.");
         }
     } */
-}
+
 
