@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
+
+    <changeSet id="1" author="system">
+        <comment>Add file path columns to dossier table</comment>
+        
+        <!-- Add new columns for file paths -->
+        <addColumn tableName="dossier">
+            <column name="pouvoir_file_path" type="varchar(255)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="contrat_signe_file_path" type="varchar(255)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="2" author="system">
+        <comment>Create indexes for file path columns</comment>
+        
+        <createIndex tableName="dossier" indexName="idx_dossier_pouvoir_file_path">
+            <column name="pouvoir_file_path"/>
+        </createIndex>
+        
+        <createIndex tableName="dossier" indexName="idx_dossier_contrat_signe_file_path">
+            <column name="contrat_signe_file_path"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="3" author="system">
+        <comment>Migrate existing data - pouvoir files</comment>
+        
+        <update tableName="dossier">
+            <column name="pouvoir_file_path" valueComputed="CONCAT('uploads/dossiers/pouvoir_', id, '.pdf')"/>
+            <where>pouvoir = 'uploaded' AND pouvoir_file_path IS NULL</where>
+        </update>
+    </changeSet>
+
+    <changeSet id="4" author="system">
+        <comment>Migrate existing data - contrat signe files</comment>
+        
+        <update tableName="dossier">
+            <column name="contrat_signe_file_path" valueComputed="CONCAT('uploads/dossiers/contrat_', id, '.pdf')"/>
+            <where>contrat_signe = 'uploaded' AND contrat_signe_file_path IS NULL</where>
+        </update>
+    </changeSet>
+
+    <changeSet id="5" author="system">
+        <comment>Add column comments</comment>
+        
+        <sql>
+            ALTER TABLE dossier 
+            MODIFY COLUMN pouvoir_file_path VARCHAR(255) NULL COMMENT 'Chemin vers le fichier pouvoir PDF',
+            MODIFY COLUMN contrat_signe_file_path VARCHAR(255) NULL COMMENT 'Chemin vers le fichier contrat signé PDF';
+        </sql>
+    </changeSet>
+
+    <changeSet id="6" author="system">
+        <comment>Create backward compatibility view</comment>
+        
+        <sql>
+            CREATE VIEW dossier_with_files AS
+            SELECT 
+                d.*,
+                CASE 
+                    WHEN d.pouvoir_file_path IS NOT NULL THEN 'uploaded'
+                    WHEN d.pouvoir IS NOT NULL AND d.pouvoir != '' THEN d.pouvoir
+                    ELSE NULL
+                END AS pouvoir_status,
+                CASE 
+                    WHEN d.contrat_signe_file_path IS NOT NULL THEN 'uploaded'
+                    WHEN d.contrat_signe IS NOT NULL AND d.contrat_signe != '' THEN d.contrat_signe
+                    ELSE NULL
+                END AS contrat_signe_status
+            FROM dossier d;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

@@ -1,4 +1,3 @@
-// Fichier : src/main/java/projet/carthagecreance_backend/Controller/UtilisateurController.java
 package projet.carthagecreance_backend.Controller;
 
 import org.springframework.beans.factory.annotation.Autowired;

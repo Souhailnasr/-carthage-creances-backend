@@ -7,15 +7,18 @@ import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.Repository.*;
 import projet.carthagecreance_backend.Service.DossierService;
+import projet.carthagecreance_backend.Service.FileStorageService;
 import projet.carthagecreance_backend.Service.NotificationService;
 import projet.carthagecreance_backend.Service.TacheUrgenteService;
 import projet.carthagecreance_backend.DTO.DossierRequest;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Implémentation du service de gestion des dossiers avec workflow complet
@@ -27,6 +30,9 @@ public class DossierServiceImpl implements DossierService {
 
     @Autowired
     private DossierRepository dossierRepository;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
 
     @Autowired
     private CreancierRepository creancierRepository;
@@ -80,14 +86,26 @@ public class DossierServiceImpl implements DossierService {
                         .orElseThrow(() -> new IllegalArgumentException("Agent créateur avec ID " + request.getAgentCreateurId() + " introuvable."));
             }
 
-            // 4. Construire l'entité Dossier avec workflow
+            // 4. Gérer les fichiers uploadés
+            String contratFilePath = null;
+            String pouvoirFilePath = null;
+            
+            if (request.getContratSigneFile() != null && !request.getContratSigneFile().isEmpty()) {
+                contratFilePath = fileStorageService.saveFile(request.getContratSigneFile(), "contrat");
+            }
+            
+            if (request.getPouvoirFile() != null && !request.getPouvoirFile().isEmpty()) {
+                pouvoirFilePath = fileStorageService.saveFile(request.getPouvoirFile(), "pouvoir");
+            }
+
+            // 5. Construire l'entité Dossier avec workflow
             Dossier dossier = Dossier.builder()
                     .titre(request.getTitre())
                     .description(request.getDescription())
                     .numeroDossier(request.getNumeroDossier())
                     .montantCreance(request.getMontantCreance())
-                    .contratSigne(request.getContratSigne())
-                    .pouvoir(request.getPouvoir())
+                    .contratSigneFilePath(contratFilePath)
+                    .pouvoirFilePath(pouvoirFilePath)
                     .urgence(request.getUrgence())
                     .dossierStatus(DossierStatus.ENCOURSDETRAITEMENT) // En cours de traitement par défaut
                     .typeDocumentJustificatif(request.getTypeDocumentJustificatif())
@@ -129,6 +147,72 @@ public class DossierServiceImpl implements DossierService {
         }
     }
 
+    @Override
+    public Dossier createDossierWithFiles(DossierRequest request, MultipartFile pouvoirFile, MultipartFile contratSigneFile) {
+        try {
+            // 1. Sauvegarder les fichiers avec FileStorageService
+            String pouvoirFilePath = null;
+            String contratSigneFilePath = null;
+            
+            if (pouvoirFile != null && !pouvoirFile.isEmpty()) {
+                pouvoirFilePath = fileStorageService.saveFile(pouvoirFile, "pouvoir");
+            }
+            
+            if (contratSigneFile != null && !contratSigneFile.isEmpty()) {
+                contratSigneFilePath = fileStorageService.saveFile(contratSigneFile, "contrat");
+            }
+            
+            // 2. Créer un nouveau DossierRequest avec les chemins des fichiers
+            DossierRequest dossierWithFiles = new DossierRequest();
+            dossierWithFiles.setTitre(request.getTitre());
+            dossierWithFiles.setDescription(request.getDescription());
+            dossierWithFiles.setNumeroDossier(request.getNumeroDossier());
+            dossierWithFiles.setMontantCreance(request.getMontantCreance());
+            dossierWithFiles.setUrgence(request.getUrgence());
+            dossierWithFiles.setDossierStatus(request.getDossierStatus());
+            dossierWithFiles.setTypeDocumentJustificatif(request.getTypeDocumentJustificatif());
+            dossierWithFiles.setNomCreancier(request.getNomCreancier());
+            dossierWithFiles.setNomDebiteur(request.getNomDebiteur());
+            dossierWithFiles.setAgentCreateurId(request.getAgentCreateurId());
+            
+            // Ajouter les chemins des fichiers
+            dossierWithFiles.setContratSigneFilePath(contratSigneFilePath);
+            dossierWithFiles.setPouvoirFilePath(pouvoirFilePath);
+            
+            // 3. Créer le dossier avec les chemins des fichiers
+            Dossier createdDossier = createDossier(dossierWithFiles);
+            
+            // 4. Retourner le dossier sauvegardé
+            return createdDossier;
+            
+        } catch (IllegalArgumentException e) {
+            // Nettoyer les fichiers partiellement uploadés en cas d'erreur
+            try {
+                if (pouvoirFile != null && !pouvoirFile.isEmpty()) {
+                    fileStorageService.deleteFile(fileStorageService.saveFile(pouvoirFile, "pouvoir"));
+                }
+                if (contratSigneFile != null && !contratSigneFile.isEmpty()) {
+                    fileStorageService.deleteFile(fileStorageService.saveFile(contratSigneFile, "contrat"));
+                }
+            } catch (Exception cleanupException) {
+                // Log l'erreur de nettoyage mais ne pas la propager
+            }
+            throw e;
+        } catch (Exception e) {
+            // Nettoyer les fichiers partiellement uploadés en cas d'erreur
+            try {
+                if (pouvoirFile != null && !pouvoirFile.isEmpty()) {
+                    fileStorageService.deleteFile(fileStorageService.saveFile(pouvoirFile, "pouvoir"));
+                }
+                if (contratSigneFile != null && !contratSigneFile.isEmpty()) {
+                    fileStorageService.deleteFile(fileStorageService.saveFile(contratSigneFile, "contrat"));
+                }
+            } catch (Exception cleanupException) {
+                // Log l'erreur de nettoyage mais ne pas la propager
+            }
+            throw new RuntimeException("Erreur lors de la création du dossier avec fichiers : " + e.getMessage(), e);
+        }
+    }
 
     @Override
     public Optional<Dossier> getDossierById(Long id) {
@@ -155,8 +239,8 @@ public class DossierServiceImpl implements DossierService {
             existingDossier.setDescription(dossierDetails.getDescription());
             existingDossier.setNumeroDossier(dossierDetails.getNumeroDossier());
             existingDossier.setMontantCreance(dossierDetails.getMontantCreance());
-            existingDossier.setContratSigne(dossierDetails.getContratSigne());
-            existingDossier.setPouvoir(dossierDetails.getPouvoir());
+            existingDossier.setContratSigneFilePath(dossierDetails.getContratSigneFilePath());
+            existingDossier.setPouvoirFilePath(dossierDetails.getPouvoirFilePath());
             existingDossier.setUrgence(dossierDetails.getUrgence());
             existingDossier.setDossierStatus(dossierDetails.getDossierStatus());
             existingDossier.setTypeDocumentJustificatif(dossierDetails.getTypeDocumentJustificatif());

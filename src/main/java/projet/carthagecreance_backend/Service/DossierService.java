@@ -4,6 +4,7 @@ package projet.carthagecreance_backend.Service;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Date;
 import java.util.List;
@@ -23,6 +24,15 @@ public interface DossierService {
      * @return Le dossier créé
      */
     Dossier createDossier(DossierRequest request);
+    
+    /**
+     * Crée un nouveau dossier avec fichiers uploadés
+     * @param request Les données du dossier à créer
+     * @param pouvoirFile Fichier pouvoir (optionnel)
+     * @param contratSigneFile Fichier contrat signé (optionnel)
+     * @return Le dossier créé avec les chemins des fichiers
+     */
+    Dossier createDossierWithFiles(DossierRequest request, MultipartFile pouvoirFile, MultipartFile contratSigneFile);
     
     /**
      * Récupère un dossier par son ID

@@ -36,9 +36,12 @@ public class Dossier implements Serializable {
     private java.util.Date dateCloture;
 
 
-    // Pièces à joindre (chemins fichiers ou liens)
-    private String contratSigne;
-    private String pouvoir;
+    // Pièces à joindre (chemins fichiers)
+    @Column(name = "contrat_signe_file_path")
+    private String contratSigneFilePath;
+    
+    @Column(name = "pouvoir_file_path")
+    private String pouvoirFilePath;
 
     @Enumerated(EnumType.STRING)
     private Urgence urgence;
@@ -122,6 +125,23 @@ public class Dossier implements Serializable {
     @Builder.Default
     @JsonIgnore // Évite la récursion infinie
     private List<TacheUrgente> tachesUrgentes = new ArrayList<>();
+    
+    // Getters et setters spécifiques pour les chemins de fichiers
+    public String getContratSigneFilePath() {
+        return contratSigneFilePath;
+    }
+    
+    public void setContratSigneFilePath(String contratSigneFilePath) {
+        this.contratSigneFilePath = contratSigneFilePath;
+    }
+    
+    public String getPouvoirFilePath() {
+        return pouvoirFilePath;
+    }
+    
+    public void setPouvoirFilePath(String pouvoirFilePath) {
+        this.pouvoirFilePath = pouvoirFilePath;
+    }
 }
     /*
 

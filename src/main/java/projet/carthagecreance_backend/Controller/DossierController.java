@@ -4,18 +4,24 @@ package projet.carthagecreance_backend.Controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.Service.DossierService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
-import projet.carthagecreance_backend.Service.Impl.FileStorageService;
+import projet.carthagecreance_backend.Service.FileStorageService;
 
+import java.io.IOException;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Contrôleur REST complet pour la gestion des dossiers avec workflow
@@ -31,11 +37,65 @@ import java.util.Optional;
 @CrossOrigin(origins = "http://localhost:4200")
 public class DossierController {
 
+    private static final Logger logger = LoggerFactory.getLogger(DossierController.class);
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    private static final String PDF_CONTENT_TYPE = "application/pdf";
+
     @Autowired
     private DossierService dossierService;
     
     @Autowired
     private FileStorageService fileStorageService;
+
+    // ==================== MÉTHODES DE VALIDATION ====================
+    
+    /**
+     * Valide un fichier PDF
+     * @param file Le fichier à valider
+     * @param fieldName Le nom du champ pour les messages d'erreur
+     * @throws IllegalArgumentException Si la validation échoue
+     */
+    private void validatePdfFile(MultipartFile file, String fieldName) {
+        if (file == null || file.isEmpty()) {
+            return; // Fichier optionnel
+        }
+        
+        // 1. Vérifier que le fichier est un PDF (content-type application/pdf)
+        String contentType = file.getContentType();
+        if (contentType == null || !PDF_CONTENT_TYPE.equals(contentType)) {
+            logger.warn("Validation échouée pour {}: type MIME invalide {}", fieldName, contentType);
+            throw new IllegalArgumentException("Le fichier " + fieldName + " doit être un PDF (type: " + contentType + ")");
+        }
+        
+        // 2. Vérifier que la taille ne dépasse pas 10MB
+        if (file.getSize() > MAX_FILE_SIZE) {
+            logger.warn("Validation échouée pour {}: taille {} MB dépasse la limite de 10MB", 
+                       fieldName, file.getSize() / (1024 * 1024));
+            throw new IllegalArgumentException("Le fichier " + fieldName + " ne peut pas dépasser 10MB (taille actuelle: " + 
+                                             (file.getSize() / (1024 * 1024)) + "MB)");
+        }
+        
+        // 3. Vérifier que le nom du fichier est valide
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.trim().isEmpty()) {
+            logger.warn("Validation échouée pour {}: nom de fichier manquant", fieldName);
+            throw new IllegalArgumentException("Le nom du fichier " + fieldName + " ne peut pas être vide");
+        }
+        
+        // Vérifier l'extension
+        if (!originalFilename.toLowerCase().endsWith(".pdf")) {
+            logger.warn("Validation échouée pour {}: extension invalide {}", fieldName, originalFilename);
+            throw new IllegalArgumentException("Le fichier " + fieldName + " doit avoir l'extension .pdf");
+        }
+        
+        // Vérifier les caractères interdits dans le nom
+        if (originalFilename.contains("..") || originalFilename.contains("/") || originalFilename.contains("\\")) {
+            logger.warn("Validation échouée pour {}: nom de fichier contient des caractères interdits {}", fieldName, originalFilename);
+            throw new IllegalArgumentException("Le nom du fichier " + fieldName + " contient des caractères interdits");
+        }
+        
+        logger.debug("Validation réussie pour {}: {} ({} bytes)", fieldName, originalFilename, file.getSize());
+    }
 
     // ==================== ENDPOINTS DE BASE (CRUD) ====================
 
@@ -52,30 +112,43 @@ public class DossierController {
      * Content-Type: multipart/form-data
      * dossier: {"titre": "Dossier test", "agentCreateurId": 1, ...}
      */
-    @PostMapping(value = "/addDossier", consumes = {"multipart/form-data"})
+    @PostMapping(value = "/addDossierWithFiles", consumes = {"multipart/form-data"})
     public ResponseEntity<?> createDossier(
             @RequestPart("dossier") DossierRequest request,
             @RequestPart(value = "contratSigne", required = false) MultipartFile contratSigne,
             @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir) {
 
         try {
+            // Validation des fichiers avant traitement
+            validatePdfFile(contratSigne, "contratSigne");
+            validatePdfFile(pouvoir, "pouvoir");
+            
             // Handle file saving if provided
             if (contratSigne != null && !contratSigne.isEmpty()) {
-                String path = fileStorageService.saveFile(contratSigne);
-                request.setContratSigne(path);
+                request.setContratSigneFile(contratSigne);
             }
             if (pouvoir != null && !pouvoir.isEmpty()) {
-                String path = fileStorageService.saveFile(pouvoir);
-                request.setPouvoir(path);
+                request.setPouvoirFile(pouvoir);
             }
 
             Dossier createdDossier = dossierService.createDossier(request);
+            logger.info("Dossier créé avec succès: ID={}, Titre={}", createdDossier.getId(), createdDossier.getTitre());
             return new ResponseEntity<>(createdDossier, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            logger.error("Erreur de validation lors de la création du dossier: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur de validation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
         } catch (RuntimeException e) {
+            logger.error("Erreur lors de la création du dossier: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Erreur lors de la création du dossier: " + e.getMessage());
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de la création du dossier: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
         }
     }
 
@@ -106,6 +179,22 @@ public class DossierController {
                     .body("Erreur lors de la création du dossier: " + e.getMessage());
         }
     }
+
+    /**
+     * Crée un nouveau dossier avec fichiers uploadés
+     * 
+     * @param dossierJson JSON du dossier à créer
+     * @param pouvoirFile Fichier pouvoir (optionnel)
+     * @param contratSigneFile Fichier contrat signé (optionnel)
+     * @return ResponseEntity avec le dossier créé (201 CREATED) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * POST /api/dossiers/addDossier
+     * Content-Type: multipart/form-data
+     * dossier: {"titre": "Dossier test", "agentCreateurId": 1, ...}
+     * pouvoir: [PDF file]
+     * contratSigne: [PDF file]
+     */
 
 
     /**
@@ -404,6 +493,174 @@ public class DossierController {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // ==================== ENDPOINTS D'UPLOAD DE FICHIERS ====================
+
+    /**
+     * Upload un fichier contrat signé pour un dossier
+     * 
+     * @param dossierId L'ID du dossier
+     * @param file Le fichier PDF à uploader
+     * @return ResponseEntity avec le chemin du fichier sauvegardé (200 OK) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * POST /api/dossiers/1/upload/contrat
+     * Content-Type: multipart/form-data
+     * file: [PDF file]
+     */
+    @PostMapping("/{dossierId}/upload/contrat")
+    public ResponseEntity<?> uploadContratSigne(@PathVariable Long dossierId, 
+                                               @RequestParam("file") MultipartFile file) {
+        try {
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest().body("Le fichier ne peut pas être vide");
+            }
+            
+            if (!fileStorageService.isValidPdfFile(file)) {
+                return ResponseEntity.badRequest().body("Seuls les fichiers PDF sont autorisés");
+            }
+            
+            String filePath = fileStorageService.saveFile(file, "contrat");
+            
+            // Mettre à jour le dossier avec le chemin du fichier
+            Optional<Dossier> dossierOpt = dossierService.getDossierById(dossierId);
+            if (dossierOpt.isPresent()) {
+                Dossier dossier = dossierOpt.get();
+                dossier.setContratSigneFilePath(filePath);
+                dossierService.updateDossier(dossierId, dossier);
+                
+                return ResponseEntity.ok(Map.of(
+                    "message", "Fichier contrat signé uploadé avec succès",
+                    "filePath", filePath
+                ));
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+            
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de l'upload: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Upload un fichier pouvoir pour un dossier
+     * 
+     * @param dossierId L'ID du dossier
+     * @param file Le fichier PDF à uploader
+     * @return ResponseEntity avec le chemin du fichier sauvegardé (200 OK) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * POST /api/dossiers/1/upload/pouvoir
+     * Content-Type: multipart/form-data
+     * file: [PDF file]
+     */
+    @PostMapping("/{dossierId}/upload/pouvoir")
+    public ResponseEntity<?> uploadPouvoir(@PathVariable Long dossierId, 
+                                          @RequestParam("file") MultipartFile file) {
+        try {
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest().body("Le fichier ne peut pas être vide");
+            }
+            
+            if (!fileStorageService.isValidPdfFile(file)) {
+                return ResponseEntity.badRequest().body("Seuls les fichiers PDF sont autorisés");
+            }
+            
+            String filePath = fileStorageService.saveFile(file, "pouvoir");
+            
+            // Mettre à jour le dossier avec le chemin du fichier
+            Optional<Dossier> dossierOpt = dossierService.getDossierById(dossierId);
+            if (dossierOpt.isPresent()) {
+                Dossier dossier = dossierOpt.get();
+                dossier.setPouvoirFilePath(filePath);
+                dossierService.updateDossier(dossierId, dossier);
+                
+                return ResponseEntity.ok(Map.of(
+                    "message", "Fichier pouvoir uploadé avec succès",
+                    "filePath", filePath
+                ));
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+            
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de l'upload: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Supprime un fichier contrat signé d'un dossier
+     * 
+     * @param dossierId L'ID du dossier
+     * @return ResponseEntity avec message de succès (200 OK) ou erreur (404 NOT_FOUND)
+     * 
+     * @example
+     * DELETE /api/dossiers/1/upload/contrat
+     */
+    @DeleteMapping("/{dossierId}/upload/contrat")
+    public ResponseEntity<?> deleteContratSigne(@PathVariable Long dossierId) {
+        try {
+            Optional<Dossier> dossierOpt = dossierService.getDossierById(dossierId);
+            if (dossierOpt.isPresent()) {
+                Dossier dossier = dossierOpt.get();
+                String filePath = dossier.getContratSigneFilePath();
+                
+                if (filePath != null && !filePath.isEmpty()) {
+                    fileStorageService.deleteFile(filePath);
+                    dossier.setContratSigneFilePath(null);
+                    dossierService.updateDossier(dossierId, dossier);
+                }
+                
+                return ResponseEntity.ok(Map.of("message", "Fichier contrat signé supprimé avec succès"));
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de la suppression: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Supprime un fichier pouvoir d'un dossier
+     * 
+     * @param dossierId L'ID du dossier
+     * @return ResponseEntity avec message de succès (200 OK) ou erreur (404 NOT_FOUND)
+     * 
+     * @example
+     * DELETE /api/dossiers/1/upload/pouvoir
+     */
+    @DeleteMapping("/{dossierId}/upload/pouvoir")
+    public ResponseEntity<?> deletePouvoir(@PathVariable Long dossierId) {
+        try {
+            Optional<Dossier> dossierOpt = dossierService.getDossierById(dossierId);
+            if (dossierOpt.isPresent()) {
+                Dossier dossier = dossierOpt.get();
+                String filePath = dossier.getPouvoirFilePath();
+                
+                if (filePath != null && !filePath.isEmpty()) {
+                    fileStorageService.deleteFile(filePath);
+                    dossier.setPouvoirFilePath(null);
+                    dossierService.updateDossier(dossierId, dossier);
+                }
+                
+                return ResponseEntity.ok(Map.of("message", "Fichier pouvoir supprimé avec succès"));
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur lors de la suppression: " + e.getMessage());
         }
     }
 

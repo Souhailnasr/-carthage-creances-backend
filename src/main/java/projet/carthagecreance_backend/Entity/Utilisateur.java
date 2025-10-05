@@ -28,7 +28,6 @@ public class Utilisateur implements Serializable {
     private String prenom;
     @Email(message = "Email invalide")
     @NotBlank(message = "L'email est obligatoire")
-    @Column(unique = true) // Assure l'unicité de l'email
     private String email;
     @NotBlank(message = "Le mot de passe est obligatoire")
     private String motDePasse;
@@ -36,9 +35,10 @@ public class Utilisateur implements Serializable {
     @Builder.Default
     private Boolean actif = true;
 
-    @Column(name = "date_creation")
-    private LocalDateTime dateCreation;
 
+    @Column(nullable = false, updatable = false)
+    @Temporal(TemporalType.TIMESTAMP)
+    private java.util.Date dateCreation;
     @Column(name = "derniere_connexion")
     private LocalDateTime derniereConnexion;
 
@@ -46,6 +46,7 @@ public class Utilisateur implements Serializable {
     private LocalDateTime derniereDeconnexion;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "role_Utilisateur")
     private RoleUtilisateur roleUtilisateur;
 
     @ManyToMany(mappedBy = "utilisateurs")
@@ -86,4 +87,9 @@ public class Utilisateur implements Serializable {
     @Builder.Default
     @JsonIgnore // Évite la récursion infinie
     private List<PerformanceAgent> performances = new ArrayList<>();
+    // Initialiser la date de création automatiquement
+    @PrePersist
+    protected void onCreate() {
+        dateCreation = new java.util.Date();
+    }
 }
