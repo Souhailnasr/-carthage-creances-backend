@@ -3,6 +3,7 @@ package projet.carthagecreance_backend.Service.Impl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import projet.carthagecreance_backend.Entity.Debiteur;
+import projet.carthagecreance_backend.Entity.Type;
 import projet.carthagecreance_backend.Repository.DebiteurRepository;
 import projet.carthagecreance_backend.Service.DebiteurService;
 
@@ -116,5 +117,52 @@ public class DebiteurServiceImpl implements DebiteurService {
     @Override
     public boolean existsByCode(String codeCreance) {
         return debiteurRepository.existsByCodeCreance(codeCreance);
+    }
+    
+    // ==================== IMPLÉMENTATION DES MÉTHODES POUR TYPE ====================
+    
+    @Override
+    public List<Debiteur> getDebiteursByType(Type type) {
+        return debiteurRepository.findByType(type);
+    }
+    
+    @Override
+    public List<Debiteur> getDebiteursByTypeAndCity(Type type, String city) {
+        return debiteurRepository.findByTypeAndVille(type, city);
+    }
+    
+    @Override
+    public List<Debiteur> getDebiteursByTypeAndPostalCode(Type type, String postalCode) {
+        return debiteurRepository.findByTypeAndCodePostal(type, postalCode);
+    }
+    
+    @Override
+    public List<Debiteur> getDebiteursByTypeAndCityAndPostalCode(Type type, String city, String postalCode) {
+        return debiteurRepository.findByTypeAndVilleAndCodePostal(type, city, postalCode);
+    }
+    
+    @Override
+    public List<Object[]> getDebiteurCountByType() {
+        return debiteurRepository.compterDebiteursParType();
+    }
+    
+    @Override
+    public List<Object[]> getDebiteurCountByTypeAndCity() {
+        return debiteurRepository.compterDebiteursParTypeEtVille();
+    }
+    
+    @Override
+    public List<Debiteur> getDebiteursPersonnePhysique() {
+        return debiteurRepository.findDebiteursPersonnePhysique();
+    }
+    
+    @Override
+    public List<Debiteur> getDebiteursPersonneMorale() {
+        return debiteurRepository.findDebiteursPersonneMorale();
+    }
+    
+    @Override
+    public List<Debiteur> getDebiteursWithoutType() {
+        return debiteurRepository.findDebiteursSansType();
     }
 }

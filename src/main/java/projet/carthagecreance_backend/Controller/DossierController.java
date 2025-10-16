@@ -4,18 +4,17 @@ package projet.carthagecreance_backend.Controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
+import projet.carthagecreance_backend.Entity.StatutValidation;
+import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Service.DossierService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import projet.carthagecreance_backend.Service.FileStorageService;
 
-import java.io.IOException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -112,11 +111,13 @@ public class DossierController {
      * Content-Type: multipart/form-data
      * dossier: {"titre": "Dossier test", "agentCreateurId": 1, ...}
      */
-    @PostMapping(value = "/addDossierWithFiles", consumes = {"multipart/form-data"})
-    public ResponseEntity<?> createDossier(
+    // Nouvelle route: POST /api/dossiers/create (multipart) — compatible Angular
+    @PostMapping(value = "/create", consumes = {"multipart/form-data"})
+    public ResponseEntity<?> createDossierMultipart(
             @RequestPart("dossier") DossierRequest request,
             @RequestPart(value = "contratSigne", required = false) MultipartFile contratSigne,
-            @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir) {
+            @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir,
+            @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef) {
 
         try {
             // Validation des fichiers avant traitement
@@ -131,8 +132,36 @@ public class DossierController {
                 request.setPouvoirFile(pouvoir);
             }
 
+            // Assigner le statut selon le rôle
+            if (!isChef) {
+                request.setStatut(Statut.EN_ATTENTE_VALIDATION);
+            }
+
             Dossier createdDossier = dossierService.createDossier(request);
             logger.info("Dossier créé avec succès: ID={}, Titre={}", createdDossier.getId(), createdDossier.getTitre());
+
+            // Si isChef=true, valider immédiatement le dossier avec l'agentCreateur comme chef
+            if (isChef) {
+                if (request.getAgentCreateurId() == null) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Validation chef",
+                        "message", "agentCreateurId est requis lorsque isChef=true",
+                        "timestamp", new Date().toString()
+                    ));
+                }
+                try {
+                    dossierService.validerDossier(createdDossier.getId(), request.getAgentCreateurId());
+                    createdDossier = dossierService.getDossierById(createdDossier.getId()).orElse(createdDossier);
+                } catch (RuntimeException e) {
+                    logger.error("Erreur lors de la validation automatique par chef: {}", e.getMessage());
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+                        "error", "Validation chef",
+                        "message", e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+                }
+            }
+
             return new ResponseEntity<>(createdDossier, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             logger.error("Erreur de validation lors de la création du dossier: {}", e.getMessage());
@@ -167,10 +196,30 @@ public class DossierController {
      *   "nomDebiteur": "Client XYZ"
      * }
      */
-    @PostMapping
-    public ResponseEntity<?> createDossierSimple(@RequestBody DossierRequest request) {
+    // Nouvelle route: POST /api/dossiers/create (JSON)
+    @PostMapping(path = "/create", consumes = {"application/json"})
+    public ResponseEntity<?> createDossierSimple(@RequestBody DossierRequest request,
+                                                 @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef) {
         try {
+            // Assigner le statut selon le rôle
+            if (!isChef) {
+                request.setStatut(Statut.EN_ATTENTE_VALIDATION);
+            }
+
             Dossier createdDossier = dossierService.createDossier(request);
+
+            if (isChef) {
+                if (request.getAgentCreateurId() == null) {
+                    return ResponseEntity.badRequest().body("agentCreateurId est requis lorsque isChef=true");
+                }
+                try {
+                    dossierService.validerDossier(createdDossier.getId(), request.getAgentCreateurId());
+                    createdDossier = dossierService.getDossierById(createdDossier.getId()).orElse(createdDossier);
+                } catch (RuntimeException e) {
+                    return ResponseEntity.badRequest().body(e.getMessage());
+                }
+            }
+
             return new ResponseEntity<>(createdDossier, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -222,9 +271,43 @@ public class DossierController {
      * GET /api/dossiers
      */
     @GetMapping
-    public ResponseEntity<List<Dossier>> getAllDossiers() {
-        List<Dossier> dossiers = dossierService.getAllDossiers();
-        return new ResponseEntity<>(dossiers, HttpStatus.OK);
+    public ResponseEntity<List<Dossier>> getAllDossiers(
+            @RequestParam(name = "role", required = false) String role,
+            @RequestParam(name = "userId", required = false) Long userId) {
+        try {
+            // Si chef (ou pas de rôle fourni), renvoyer tous les dossiers
+            if (role == null || role.toUpperCase().startsWith("CHEF")) {
+                return new ResponseEntity<>(dossierService.getAllDossiers(), HttpStatus.OK);
+            }
+
+            // Si agent: ne voit que ses dossiers (créés ou responsables) avec statuts autorisés
+            if (role.toUpperCase().startsWith("AGENT")) {
+                if (userId == null) {
+                    return ResponseEntity.badRequest().build();
+                }
+                List<Dossier> responsablesAttente = dossierService.getDossiersParAgentEtStatut(userId, Statut.EN_ATTENTE_VALIDATION);
+                List<Dossier> responsablesValides = dossierService.getDossiersParAgentEtStatut(userId, Statut.VALIDE);
+                List<Dossier> crees = dossierService.getDossiersCreesByAgent(userId);
+                // Filtrer les créés par statuts autorisés
+                crees = crees.stream()
+                        .filter(d -> d.getStatut() == Statut.EN_ATTENTE_VALIDATION || d.getStatut() == Statut.VALIDE)
+                        .toList();
+
+                // Fusionner et dédupliquer
+                List<Dossier> result = new java.util.ArrayList<>();
+                result.addAll(responsablesAttente);
+                result.addAll(responsablesValides);
+                result.addAll(crees);
+                result = result.stream().distinct().toList();
+                return ResponseEntity.ok(result);
+            }
+
+            // Rôle inconnu
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("Erreur getAllDossiers avec filtres: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     /**
@@ -362,10 +445,23 @@ public class DossierController {
         return new ResponseEntity<>(dossiers, HttpStatus.OK);
     }
 
+    // GET /api/dossiers/search?term=
     @GetMapping("/search")
-    public ResponseEntity<List<Dossier>> searchDossiers(@RequestParam String searchTerm) {
-        List<Dossier> dossiers = dossierService.searchDossiers(searchTerm);
+    public ResponseEntity<List<Dossier>> searchDossiers(@RequestParam(name = "term") String term) {
+        List<Dossier> dossiers = dossierService.searchDossiers(term);
         return new ResponseEntity<>(dossiers, HttpStatus.OK);
+    }
+
+    // GET /api/dossiers/status/{statut}
+    @GetMapping("/status/{statut}")
+    public ResponseEntity<List<Dossier>> getDossiersByValidationStatut(@PathVariable String statut) {
+        try {
+            StatutValidation s = StatutValidation.valueOf(statut.toUpperCase());
+            List<Dossier> dossiers = dossierService.getDossiersByValidationStatut(s);
+            return ResponseEntity.ok(dossiers);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     // Special Operations
@@ -462,11 +558,14 @@ public class DossierController {
      * @example
      * POST /api/dossiers/1/valider?chefId=5
      */
-    @PostMapping("/{id}/valider")
+    // PUT /api/dossiers/{id}/valider
+    @PutMapping("/{id}/valider")
     public ResponseEntity<Dossier> validerDossier(@PathVariable Long id, @RequestParam Long chefId) {
         try {
-            Dossier dossier = dossierService.validerDossier(id, chefId);
-            return new ResponseEntity<>(dossier, HttpStatus.OK);
+            dossierService.validerDossier(id, chefId);
+            Optional<Dossier> updated = dossierService.getDossierById(id);
+            return updated.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
+                    .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
@@ -484,15 +583,83 @@ public class DossierController {
      * @example
      * POST /api/dossiers/1/rejeter?commentaire=Informations manquantes
      */
-    @PostMapping("/{id}/rejeter")
+    // PUT /api/dossiers/{id}/rejeter
+    @PutMapping("/{id}/rejeter")
     public ResponseEntity<Dossier> rejeterDossier(@PathVariable Long id, @RequestParam String commentaire) {
         try {
-            Dossier dossier = dossierService.rejeterDossier(id, commentaire);
-            return new ResponseEntity<>(dossier, HttpStatus.OK);
+            dossierService.rejeterDossier(id, commentaire);
+            Optional<Dossier> updated = dossierService.getDossierById(id);
+            return updated.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
+                    .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // GET /api/dossiers/stats?agentId=
+    @GetMapping("/stats")
+    public ResponseEntity<?> getStats(@RequestParam(name = "agentId", required = false) Long agentId,
+                                      @RequestParam(name = "role", required = false) String role) {
+        try {
+            if (role != null && role.toUpperCase().startsWith("AGENT")) {
+                if (agentId == null) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "agentId requis pour role=AGENT"));
+                }
+                // Stats restreintes à l'agent (créés + responsables)
+                List<Dossier> visibles = getAllDossiers("AGENT", agentId).getBody();
+                if (visibles == null) visibles = java.util.List.of();
+                long total = visibles.size();
+                long valides = visibles.stream().filter(d -> d.getStatut() == Statut.VALIDE).count();
+                long enCours = visibles.stream().filter(d -> d.getStatut() == Statut.EN_ATTENTE_VALIDATION).count();
+                long ceMois = visibles.stream().filter(d -> {
+                    java.util.Calendar c = java.util.Calendar.getInstance();
+                    c.set(java.util.Calendar.DAY_OF_MONTH, 1);
+                    c.set(java.util.Calendar.HOUR_OF_DAY, 0);
+                    c.set(java.util.Calendar.MINUTE, 0);
+                    c.set(java.util.Calendar.SECOND, 0);
+                    c.set(java.util.Calendar.MILLISECOND, 0);
+                    return d.getDateCreation() != null && d.getDateCreation().after(c.getTime());
+                }).count();
+                return ResponseEntity.ok(Map.of(
+                    "total", total,
+                    "enCours", enCours,
+                    "valides", valides,
+                    "ceMois", ceMois,
+                    "agentId", agentId
+                ));
+            } else {
+                // Chef (ou rôle non fourni): stats globales
+                long total = dossierService.countTotalDossiers();
+                long enCours = dossierService.countDossiersEnCours();
+                long valides = dossierService.countDossiersValides();
+                long ceMois = dossierService.countDossiersCreesCeMois();
+                if (agentId != null) {
+                    long nbAgent = dossierService.countDossiersByAgent(agentId);
+                    long nbAgentCrees = dossierService.countDossiersCreesByAgent(agentId);
+                    return ResponseEntity.ok(Map.of(
+                        "total", total,
+                        "enCours", enCours,
+                        "valides", valides,
+                        "ceMois", ceMois,
+                        "agentId", agentId,
+                        "parAgent", nbAgent,
+                        "creesParAgent", nbAgentCrees
+                    ));
+                }
+                return ResponseEntity.ok(Map.of(
+                    "total", total,
+                    "enCours", enCours,
+                    "valides", valides,
+                    "ceMois", ceMois
+                ));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Stats",
+                "message", e.getMessage()
+            ));
         }
     }
 
@@ -773,6 +940,107 @@ public class DossierController {
             return new ResponseEntity<>(count, HttpStatus.OK);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // ==================== ENDPOINTS D'AFFECTATION ====================
+
+    /**
+     * Assigne un agent responsable à un dossier
+     * 
+     * @param id L'ID du dossier
+     * @param agentId L'ID de l'agent à assigner
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * PUT /api/dossiers/1/assign/agent?agentId=5
+     */
+    @PutMapping("/{id}/assign/agent")
+    public ResponseEntity<?> assignerAgentResponsable(@PathVariable Long id, @RequestParam Long agentId) {
+        try {
+            Dossier updatedDossier = dossierService.assignerAgentResponsable(id, agentId);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'assignation de l'agent: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'assignation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'assignation de l'agent: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'assignation de l'agent: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+
+    /**
+     * Assigne un avocat à un dossier
+     * 
+     * @param id L'ID du dossier
+     * @param avocatId L'ID de l'avocat à assigner
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * PUT /api/dossiers/1/assign/avocat?avocatId=3
+     */
+    @PutMapping("/{id}/assign/avocat")
+    public ResponseEntity<?> assignerAvocat(@PathVariable Long id, @RequestParam Long avocatId) {
+        try {
+            Dossier updatedDossier = dossierService.assignerAvocat(id, avocatId);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'assignation de l'avocat: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'assignation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'assignation de l'avocat: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'assignation de l'avocat: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+
+    /**
+     * Assigne un huissier à un dossier
+     * 
+     * @param id L'ID du dossier
+     * @param huissierId L'ID de l'huissier à assigner
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * PUT /api/dossiers/1/assign/huissier?huissierId=2
+     */
+    @PutMapping("/{id}/assign/huissier")
+    public ResponseEntity<?> assignerHuissier(@PathVariable Long id, @RequestParam Long huissierId) {
+        try {
+            Dossier updatedDossier = dossierService.assignerHuissier(id, huissierId);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'assignation de l'huissier: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'assignation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'assignation de l'huissier: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'assignation de l'huissier: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
         }
     }
 }

@@ -2,6 +2,7 @@ package projet.carthagecreance_backend.Service;
 
 import projet.carthagecreance_backend.Entity.Action;
 import projet.carthagecreance_backend.Entity.TypeAction;
+import projet.carthagecreance_backend.Entity.ReponseDebiteur;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -27,4 +28,22 @@ public interface ActionService {
     Double calculateTotalCostByDossier(Long dossierId);
     Double calculateTotalCostByType(TypeAction type);
     List<Action> getActionsWithCostGreaterThan(Double amount);
+    
+    // ==================== MÉTHODES POUR REPONSEDEBITEUR ====================
+    
+    // Search Operations by ReponseDebiteur
+    List<Action> getActionsByReponseDebiteur(ReponseDebiteur reponseDebiteur);
+    List<Action> getActionsByTypeAndReponseDebiteur(TypeAction type, ReponseDebiteur reponseDebiteur);
+    List<Action> getActionsByDossierAndReponseDebiteur(Long dossierId, ReponseDebiteur reponseDebiteur);
+    List<Action> getActionsByTypeAndDossierAndReponseDebiteur(TypeAction type, Long dossierId, ReponseDebiteur reponseDebiteur);
+    
+    // Statistics Operations for ReponseDebiteur
+    List<Object[]> getActionCountByReponseDebiteur();
+    List<Object[]> getActionCountByTypeAndReponseDebiteur();
+    Double calculateTotalCostByReponseDebiteur(ReponseDebiteur reponseDebiteur);
+    
+    // Specific ReponseDebiteur Operations
+    List<Action> getActionsWithPositiveResponse();
+    List<Action> getActionsWithNegativeResponse();
+    List<Action> getActionsWithoutResponse();
 }

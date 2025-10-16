@@ -3,6 +3,7 @@ package projet.carthagecreance_backend.Service.Impl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import projet.carthagecreance_backend.Entity.Creancier;
+import projet.carthagecreance_backend.Entity.Type;
 import projet.carthagecreance_backend.Repository.CreancierRepository;
 import projet.carthagecreance_backend.Service.CreancierService;
 
@@ -121,5 +122,52 @@ public class CreancierServiceImpl implements CreancierService {
     @Override
     public boolean existsByCodeCreance(String codeCreance) {
         return creancierRepository.existsByCodeCreance(codeCreance);
+    }
+    
+    // ==================== IMPLÉMENTATION DES MÉTHODES POUR TYPE ====================
+    
+    @Override
+    public List<Creancier> getCreanciersByType(Type type) {
+        return creancierRepository.findByType(type);
+    }
+    
+    @Override
+    public List<Creancier> getCreanciersByTypeAndCity(Type type, String city) {
+        return creancierRepository.findByTypeAndVille(type, city);
+    }
+    
+    @Override
+    public List<Creancier> getCreanciersByTypeAndPostalCode(Type type, String postalCode) {
+        return creancierRepository.findByTypeAndCodePostal(type, postalCode);
+    }
+    
+    @Override
+    public List<Creancier> getCreanciersByTypeAndCityAndPostalCode(Type type, String city, String postalCode) {
+        return creancierRepository.findByTypeAndVilleAndCodePostal(type, city, postalCode);
+    }
+    
+    @Override
+    public List<Object[]> getCreancierCountByType() {
+        return creancierRepository.compterCreanciersParType();
+    }
+    
+    @Override
+    public List<Object[]> getCreancierCountByTypeAndCity() {
+        return creancierRepository.compterCreanciersParTypeEtVille();
+    }
+    
+    @Override
+    public List<Creancier> getCreanciersPersonnePhysique() {
+        return creancierRepository.findCreanciersPersonnePhysique();
+    }
+    
+    @Override
+    public List<Creancier> getCreanciersPersonneMorale() {
+        return creancierRepository.findCreanciersPersonneMorale();
+    }
+    
+    @Override
+    public List<Creancier> getCreanciersWithoutType() {
+        return creancierRepository.findCreanciersSansType();
     }
 }

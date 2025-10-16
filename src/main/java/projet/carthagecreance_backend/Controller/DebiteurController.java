@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.Debiteur;
+import projet.carthagecreance_backend.Entity.Type;
 import projet.carthagecreance_backend.Service.DebiteurService;
 
 import java.util.List;
@@ -153,5 +154,71 @@ public class DebiteurController {
     public ResponseEntity<Boolean> existsByCode(@PathVariable String codeCreance) {
         boolean exists = debiteurService.existsByCode(codeCreance);
         return new ResponseEntity<>(exists, HttpStatus.OK);
+    }
+    
+    // ==================== ENDPOINTS POUR TYPE ====================
+    
+    // Search Operations by Type
+    @GetMapping("/type/{type}")
+    public ResponseEntity<List<Debiteur>> getDebiteursByType(@PathVariable Type type) {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursByType(type);
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/city/{city}")
+    public ResponseEntity<List<Debiteur>> getDebiteursByTypeAndCity(
+            @PathVariable Type type, 
+            @PathVariable String city) {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursByTypeAndCity(type, city);
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/postal-code/{postalCode}")
+    public ResponseEntity<List<Debiteur>> getDebiteursByTypeAndPostalCode(
+            @PathVariable Type type, 
+            @PathVariable String postalCode) {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursByTypeAndPostalCode(type, postalCode);
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/city-postal")
+    public ResponseEntity<List<Debiteur>> getDebiteursByTypeAndCityAndPostalCode(
+            @PathVariable Type type,
+            @RequestParam String city, 
+            @RequestParam String postalCode) {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursByTypeAndCityAndPostalCode(type, city, postalCode);
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
+    }
+    
+    // Statistics Operations for Type
+    @GetMapping("/statistiques/type")
+    public ResponseEntity<List<Object[]>> getDebiteurCountByType() {
+        List<Object[]> statistics = debiteurService.getDebiteurCountByType();
+        return new ResponseEntity<>(statistics, HttpStatus.OK);
+    }
+    
+    @GetMapping("/statistiques/type-et-ville")
+    public ResponseEntity<List<Object[]>> getDebiteurCountByTypeAndCity() {
+        List<Object[]> statistics = debiteurService.getDebiteurCountByTypeAndCity();
+        return new ResponseEntity<>(statistics, HttpStatus.OK);
+    }
+    
+    // Specific Type Operations
+    @GetMapping("/personne-physique")
+    public ResponseEntity<List<Debiteur>> getDebiteursPersonnePhysique() {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursPersonnePhysique();
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
+    }
+    
+    @GetMapping("/personne-morale")
+    public ResponseEntity<List<Debiteur>> getDebiteursPersonneMorale() {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursPersonneMorale();
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
+    }
+    
+    @GetMapping("/sans-type")
+    public ResponseEntity<List<Debiteur>> getDebiteursWithoutType() {
+        List<Debiteur> debiteurs = debiteurService.getDebiteursWithoutType();
+        return new ResponseEntity<>(debiteurs, HttpStatus.OK);
     }
 }

@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Service;
 
 import projet.carthagecreance_backend.Entity.Debiteur;
+import projet.carthagecreance_backend.Entity.Type;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,4 +32,21 @@ public interface DebiteurService {
     boolean existsByEmail(String email);
     boolean existsByPhone(String phone);
     boolean existsByCode(String codeCreance);
+    
+    // ==================== MÉTHODES POUR TYPE ====================
+    
+    // Search Operations by Type
+    List<Debiteur> getDebiteursByType(Type type);
+    List<Debiteur> getDebiteursByTypeAndCity(Type type, String city);
+    List<Debiteur> getDebiteursByTypeAndPostalCode(Type type, String postalCode);
+    List<Debiteur> getDebiteursByTypeAndCityAndPostalCode(Type type, String city, String postalCode);
+    
+    // Statistics Operations for Type
+    List<Object[]> getDebiteurCountByType();
+    List<Object[]> getDebiteurCountByTypeAndCity();
+    
+    // Specific Type Operations
+    List<Debiteur> getDebiteursPersonnePhysique();
+    List<Debiteur> getDebiteursPersonneMorale();
+    List<Debiteur> getDebiteursWithoutType();
 }

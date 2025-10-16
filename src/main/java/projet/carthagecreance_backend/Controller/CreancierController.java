@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.Creancier;
+import projet.carthagecreance_backend.Entity.Type;
 import projet.carthagecreance_backend.Service.CreancierService;
 
 import java.util.List;
@@ -147,5 +148,71 @@ public class CreancierController {
     public ResponseEntity<Boolean> existsByCode(@PathVariable String codeCreancier) {
         boolean exists = creancierService.existsByCode(codeCreancier);
         return new ResponseEntity<>(exists, HttpStatus.OK);
+    }
+    
+    // ==================== ENDPOINTS POUR TYPE ====================
+    
+    // Search Operations by Type
+    @GetMapping("/type/{type}")
+    public ResponseEntity<List<Creancier>> getCreanciersByType(@PathVariable Type type) {
+        List<Creancier> creanciers = creancierService.getCreanciersByType(type);
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/city/{city}")
+    public ResponseEntity<List<Creancier>> getCreanciersByTypeAndCity(
+            @PathVariable Type type, 
+            @PathVariable String city) {
+        List<Creancier> creanciers = creancierService.getCreanciersByTypeAndCity(type, city);
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/postal-code/{postalCode}")
+    public ResponseEntity<List<Creancier>> getCreanciersByTypeAndPostalCode(
+            @PathVariable Type type, 
+            @PathVariable String postalCode) {
+        List<Creancier> creanciers = creancierService.getCreanciersByTypeAndPostalCode(type, postalCode);
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/city-postal")
+    public ResponseEntity<List<Creancier>> getCreanciersByTypeAndCityAndPostalCode(
+            @PathVariable Type type,
+            @RequestParam String city, 
+            @RequestParam String postalCode) {
+        List<Creancier> creanciers = creancierService.getCreanciersByTypeAndCityAndPostalCode(type, city, postalCode);
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
+    }
+    
+    // Statistics Operations for Type
+    @GetMapping("/statistiques/type")
+    public ResponseEntity<List<Object[]>> getCreancierCountByType() {
+        List<Object[]> statistics = creancierService.getCreancierCountByType();
+        return new ResponseEntity<>(statistics, HttpStatus.OK);
+    }
+    
+    @GetMapping("/statistiques/type-et-ville")
+    public ResponseEntity<List<Object[]>> getCreancierCountByTypeAndCity() {
+        List<Object[]> statistics = creancierService.getCreancierCountByTypeAndCity();
+        return new ResponseEntity<>(statistics, HttpStatus.OK);
+    }
+    
+    // Specific Type Operations
+    @GetMapping("/personne-physique")
+    public ResponseEntity<List<Creancier>> getCreanciersPersonnePhysique() {
+        List<Creancier> creanciers = creancierService.getCreanciersPersonnePhysique();
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
+    }
+    
+    @GetMapping("/personne-morale")
+    public ResponseEntity<List<Creancier>> getCreanciersPersonneMorale() {
+        List<Creancier> creanciers = creancierService.getCreanciersPersonneMorale();
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
+    }
+    
+    @GetMapping("/sans-type")
+    public ResponseEntity<List<Creancier>> getCreanciersWithoutType() {
+        List<Creancier> creanciers = creancierService.getCreanciersWithoutType();
+        return new ResponseEntity<>(creanciers, HttpStatus.OK);
     }
 }

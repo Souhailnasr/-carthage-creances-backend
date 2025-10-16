@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.DossierStatus;
+import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Entity.Urgence;
 
 import java.util.Date;
@@ -119,6 +120,15 @@ public interface DossierRepository extends JpaRepository<Dossier, Long> {
     
     // Rechercher par statut de dossier
     List<Dossier> findByDossierStatus(DossierStatus dossierStatus);
+    
+    // Nouveau: Rechercher par statut (enum Statut)
+    List<Dossier> findByStatut(Statut statut);
+    
+    // Nouveau: Filtrer par statut et agent responsable
+    List<Dossier> findByStatutAndAgentResponsableId(Statut statut, Long agentId);
+    
+    // Nouveau: Filtrer par statut et agent créateur
+    List<Dossier> findByStatutAndAgentCreateurId(Statut statut, Long agentId);
     
     // Rechercher par agent créateur
     @Query("SELECT d FROM Dossier d WHERE d.agentCreateur.id = :agentId")

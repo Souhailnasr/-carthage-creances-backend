@@ -3,6 +3,8 @@ package projet.carthagecreance_backend.Service;
 
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
+import projet.carthagecreance_backend.Entity.StatutValidation;
+import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import org.springframework.web.multipart.MultipartFile;
 
@@ -19,7 +21,11 @@ public interface DossierService {
     // ==================== CRUD Operations ====================
     
     /**
-     * Crée un nouveau dossier avec workflow de validation
+     * Crée un nouveau dossier avec workflow de validation.
+     * Règles métier:
+     * - Un agent peut créer un dossier => une ValidationDossier est créée avec statut EN_ATTENTE
+     * - Un chef (rôle commençant par CHEF_DEPARTEMENT) crée un dossier => validation automatique (VALIDE)
+     * Les fichiers PDF (contrat, pouvoir) sont référencés via des chemins stockés sur l'entité Dossier.
      * @param request Les données du dossier à créer
      * @return Le dossier créé
      */
@@ -37,7 +43,7 @@ public interface DossierService {
     /**
      * Récupère un dossier par son ID
      * @param id L'ID du dossier
-     * @return Le dossier trouvé
+     * @return Un Optional contenant le dossier si présent
      */
     Optional<Dossier> getDossierById(Long id);
     
@@ -92,10 +98,28 @@ public interface DossierService {
     // ==================== Nouvelles méthodes de workflow ====================
 
     /**
-     * Récupère les dossiers en attente de validation
+     * Récupère les dossiers en attente de validation.
+     * Basé sur les entrées de ValidationDossier avec statut EN_ATTENTE.
      * @return Liste des dossiers en attente
      */
     List<Dossier> getDossiersEnAttente();
+
+    /**
+     * Récupère les dossiers par statut de validation (EN_ATTENTE, VALIDE, REJETE).
+     * @param statut Statut de validation recherché
+     * @return Liste des dossiers
+     */
+    List<Dossier> getDossiersByValidationStatut(StatutValidation statut);
+
+    /**
+     * Récupère les dossiers validés (statut VALIDE).
+     */
+    List<Dossier> getDossiersValides();
+
+    /**
+     * Récupère les dossiers par agent et statut (Statut workflow).
+     */
+    List<Dossier> getDossiersParAgentEtStatut(Long agentId, Statut statut);
 
     /**
      * Récupère les dossiers assignés à un agent
@@ -112,22 +136,24 @@ public interface DossierService {
     List<Dossier> getDossiersCreesByAgent(Long agentId);
 
     /**
-     * Valide un dossier
+     * Valide un dossier.
+     * Nécessite un utilisateur chef (rôle CHEF_DEPARTEMENT_*) comme validateur.
      * @param dossierId L'ID du dossier à valider
      * @param chefId L'ID du chef qui valide
      * @return Le dossier validé
-     * @throws RuntimeException si l'agent ou le chef n'existe pas, ou si le chef n'a pas les droits
+     * @throws RuntimeException si le dossier/chef n'existe pas ou si l'utilisateur n'a pas les droits
      */
-    Dossier validerDossier(Long dossierId, Long chefId);
+    void validerDossier(Long dossierId, Long chefId);
 
     /**
-     * Rejette un dossier
+     * Rejette un dossier.
+     * Le dossier reste non validé et en cours de traitement pour correction.
      * @param dossierId L'ID du dossier à rejeter
      * @param commentaire Le commentaire de rejet
-     * @return Le dossier rejeté
+     * @return Le dossier mis à jour
      * @throws RuntimeException si le dossier n'existe pas
      */
-    Dossier rejeterDossier(Long dossierId, String commentaire);
+    void rejeterDossier(Long dossierId, String commentaire);
 
     // ==================== Méthodes de comptage ====================
 
@@ -138,13 +164,15 @@ public interface DossierService {
     long countTotalDossiers();
 
     /**
-     * Compte les dossiers en cours de traitement
+     * Compte les dossiers en cours de traitement.
+     * Correspond au nombre de validations en statut EN_ATTENTE.
      * @return Nombre de dossiers en cours
      */
     long countDossiersEnCours();
 
     /**
-     * Compte les dossiers validés
+     * Compte les dossiers validés.
+     * Correspond au nombre de validations en statut VALIDE.
      * @return Nombre de dossiers validés
      */
     long countDossiersValides();
@@ -168,4 +196,9 @@ public interface DossierService {
      * @return Nombre de dossiers créés par l'agent
      */
     long countDossiersCreesByAgent(Long agentId);
+
+    // ==================== Affectations ====================
+    Dossier assignerAgentResponsable(Long dossierId, Long agentId);
+    Dossier assignerAvocat(Long dossierId, Long avocatId);
+    Dossier assignerHuissier(Long dossierId, Long huissierId);
 }

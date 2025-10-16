@@ -4,7 +4,9 @@ import lombok.Setter;
 import org.springframework.web.multipart.MultipartFile;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.Entity.DossierStatus;
+import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Entity.TypeDocumentJustificatif; // Ajout
+import projet.carthagecreance_backend.Entity.Type; // Ajout type personne
 
 @Getter
 @Setter
@@ -20,9 +22,20 @@ public class DossierRequest {
     private String pouvoirFilePath;          // Chemin du fichier pouvoir
     private Urgence urgence;
     private DossierStatus dossierStatus;
+    private Statut statut; // optionnel: statut du workflow (EN_ATTENTE_VALIDATION, VALIDE, REJETE, EN_COURS, CLOTURE)
     private TypeDocumentJustificatif typeDocumentJustificatif; // Ajout
-    private String nomCreancier; // Nom du créancier
-    private String nomDebiteur;  // Nom du débiteur
+    // Créancier
+    private Type typeCreancier; // PERSONNE_PHYSIQUE ou PERSONNE_MORALE
+    private String nomCreancier; // Obligatoire pour MORALE et PHYSIQUE
+    private String prenomCreancier; // Obligatoire si PHYSIQUE
+    private String codeCreancier; // optionnel
+    private String codeCreanceCreancier; // optionnel
+
+    // Débiteur
+    private Type typeDebiteur; // PERSONNE_PHYSIQUE ou PERSONNE_MORALE
+    private String nomDebiteur;  // Obligatoire pour MORALE et PHYSIQUE
+    private String prenomDebiteur; // Obligatoire si PHYSIQUE
+    private String codeCreanceDebiteur; // optionnel
     private Long agentCreateurId; // ID de l'agent créateur (optionnel)
     
     // Getters et setters pour les fichiers

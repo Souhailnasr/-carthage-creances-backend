@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Service;
 
 import projet.carthagecreance_backend.Entity.Creancier;
+import projet.carthagecreance_backend.Entity.Type;
 
 import java.util.List;
 import java.util.Optional;
@@ -32,4 +33,21 @@ public interface CreancierService {
     boolean existsByPhone(String phone);
     boolean existsByCode(String codeCreancier);
     boolean existsByCodeCreance(String codeCreance);
+    
+    // ==================== MÉTHODES POUR TYPE ====================
+    
+    // Search Operations by Type
+    List<Creancier> getCreanciersByType(Type type);
+    List<Creancier> getCreanciersByTypeAndCity(Type type, String city);
+    List<Creancier> getCreanciersByTypeAndPostalCode(Type type, String postalCode);
+    List<Creancier> getCreanciersByTypeAndCityAndPostalCode(Type type, String city, String postalCode);
+    
+    // Statistics Operations for Type
+    List<Object[]> getCreancierCountByType();
+    List<Object[]> getCreancierCountByTypeAndCity();
+    
+    // Specific Type Operations
+    List<Creancier> getCreanciersPersonnePhysique();
+    List<Creancier> getCreanciersPersonneMorale();
+    List<Creancier> getCreanciersWithoutType();
 }

@@ -49,6 +49,9 @@ public class Dossier implements Serializable {
     private DossierStatus dossierStatus;
 
     @Enumerated(EnumType.STRING)
+    private Statut statut;
+
+    @Enumerated(EnumType.STRING)
     private TypeDocumentJustificatif typeDocumentJustificatif;
     // Utilisateurs associés
     @ManyToMany
@@ -96,6 +99,9 @@ public class Dossier implements Serializable {
     @PrePersist
     protected void onCreate() {
         dateCreation = new java.util.Date();
+        if (statut == null) {
+            statut = Statut.EN_ATTENTE_VALIDATION;
+        }
     }
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_createur_id")

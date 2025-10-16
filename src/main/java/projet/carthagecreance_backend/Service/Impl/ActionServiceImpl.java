@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import projet.carthagecreance_backend.Entity.Action;
 import projet.carthagecreance_backend.Entity.TypeAction;
+import projet.carthagecreance_backend.Entity.ReponseDebiteur;
 import projet.carthagecreance_backend.Repository.ActionRepository;
 import projet.carthagecreance_backend.Service.ActionService;
 
@@ -88,5 +89,57 @@ public class ActionServiceImpl implements ActionService {
     @Override
     public List<Action> getActionsWithCostGreaterThan(Double amount) {
         return actionRepository.findByCoutSuperieurA(amount);
+    }
+    
+    // ==================== IMPLÉMENTATION DES MÉTHODES POUR REPONSEDEBITEUR ====================
+    
+    @Override
+    public List<Action> getActionsByReponseDebiteur(ReponseDebiteur reponseDebiteur) {
+        return actionRepository.findByReponseDebiteur(reponseDebiteur);
+    }
+    
+    @Override
+    public List<Action> getActionsByTypeAndReponseDebiteur(TypeAction type, ReponseDebiteur reponseDebiteur) {
+        return actionRepository.findByTypeAndReponseDebiteur(type, reponseDebiteur);
+    }
+    
+    @Override
+    public List<Action> getActionsByDossierAndReponseDebiteur(Long dossierId, ReponseDebiteur reponseDebiteur) {
+        return actionRepository.findByDossierIdAndReponseDebiteur(dossierId, reponseDebiteur);
+    }
+    
+    @Override
+    public List<Action> getActionsByTypeAndDossierAndReponseDebiteur(TypeAction type, Long dossierId, ReponseDebiteur reponseDebiteur) {
+        return actionRepository.findByTypeAndDossierIdAndReponseDebiteur(type, dossierId, reponseDebiteur);
+    }
+    
+    @Override
+    public List<Object[]> getActionCountByReponseDebiteur() {
+        return actionRepository.compterActionsParReponseDebiteur();
+    }
+    
+    @Override
+    public List<Object[]> getActionCountByTypeAndReponseDebiteur() {
+        return actionRepository.compterActionsParTypeEtReponseDebiteur();
+    }
+    
+    @Override
+    public Double calculateTotalCostByReponseDebiteur(ReponseDebiteur reponseDebiteur) {
+        return actionRepository.calculerCoutTotalParReponseDebiteur(reponseDebiteur);
+    }
+    
+    @Override
+    public List<Action> getActionsWithPositiveResponse() {
+        return actionRepository.findActionsAvecReponsePositive();
+    }
+    
+    @Override
+    public List<Action> getActionsWithNegativeResponse() {
+        return actionRepository.findActionsAvecReponseNegative();
+    }
+    
+    @Override
+    public List<Action> getActionsWithoutResponse() {
+        return actionRepository.findActionsSansReponseDebiteur();
     }
 }

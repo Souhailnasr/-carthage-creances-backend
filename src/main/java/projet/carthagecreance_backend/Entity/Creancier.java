@@ -32,7 +32,6 @@ public class Creancier implements Serializable {
 
     @NotBlank(message = "Le nom est obligatoire")
     private String nom;
-    @NotBlank(message = "Le prénom est obligatoire")
     private String prenom;
     private String adresse;
     private String ville;
@@ -41,8 +40,9 @@ public class Creancier implements Serializable {
     private String telephone;
     private String fax;
     @Email(message = "Email invalide")
-    @NotBlank(message = "L'email est obligatoire")
     private String email;
+    @Enumerated(EnumType.STRING)
+    private Type type;
 
     // Un créancier peut avoir plusieurs dossiers
     @OneToMany(mappedBy = "creancier") // mappedBy pointe vers le champ 'creancier' dans Dossier

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import projet.carthagecreance_backend.Entity.Creancier;
+import projet.carthagecreance_backend.Entity.Type;
 
 import java.util.List;
 import java.util.Optional;
@@ -64,5 +65,39 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     // Compter les créanciers par ville
     @Query("SELECT c.ville, COUNT(c) FROM Creancier c WHERE c.ville IS NOT NULL GROUP BY c.ville ORDER BY COUNT(c) DESC")
     List<Object[]> compterCreanciersParVille();
+    
+    // ==================== MÉTHODES POUR TYPE ====================
+    
+    // Rechercher les créanciers par type
+    List<Creancier> findByType(Type type);
+    
+    // Rechercher les créanciers par type et ville
+    List<Creancier> findByTypeAndVille(Type type, String ville);
+    
+    // Rechercher les créanciers par type et code postal
+    List<Creancier> findByTypeAndCodePostal(Type type, String codePostal);
+    
+    // Rechercher les créanciers par type et ville et code postal
+    List<Creancier> findByTypeAndVilleAndCodePostal(Type type, String ville, String codePostal);
+    
+    // Compter les créanciers par type
+    @Query("SELECT c.type, COUNT(c) FROM Creancier c WHERE c.type IS NOT NULL GROUP BY c.type")
+    List<Object[]> compterCreanciersParType();
+    
+    // Compter les créanciers par type et ville
+    @Query("SELECT c.type, c.ville, COUNT(c) FROM Creancier c WHERE c.type IS NOT NULL AND c.ville IS NOT NULL GROUP BY c.type, c.ville")
+    List<Object[]> compterCreanciersParTypeEtVille();
+    
+    // Rechercher les créanciers de type personne physique
+    @Query("SELECT c FROM Creancier c WHERE c.type = 'PERSONNE_PHYSIQUE'")
+    List<Creancier> findCreanciersPersonnePhysique();
+    
+    // Rechercher les créanciers de type personne morale
+    @Query("SELECT c FROM Creancier c WHERE c.type = 'PERSONNE_MORALE'")
+    List<Creancier> findCreanciersPersonneMorale();
+    
+    // Rechercher les créanciers sans type défini
+    @Query("SELECT c FROM Creancier c WHERE c.type IS NULL")
+    List<Creancier> findCreanciersSansType();
 
 }

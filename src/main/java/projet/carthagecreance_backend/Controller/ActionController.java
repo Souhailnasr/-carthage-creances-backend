@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.Action;
 import projet.carthagecreance_backend.Entity.TypeAction;
+import projet.carthagecreance_backend.Entity.ReponseDebiteur;
 import projet.carthagecreance_backend.Service.ActionService;
 
 import java.time.LocalDate;
@@ -115,6 +116,78 @@ public class ActionController {
     @GetMapping("/cost-greater-than")
     public ResponseEntity<List<Action>> getActionsWithCostGreaterThan(@RequestParam Double amount) {
         List<Action> actions = actionService.getActionsWithCostGreaterThan(amount);
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    // ==================== ENDPOINTS POUR REPONSEDEBITEUR ====================
+    
+    // Search Operations by ReponseDebiteur
+    @GetMapping("/reponse/{reponseDebiteur}")
+    public ResponseEntity<List<Action>> getActionsByReponseDebiteur(@PathVariable ReponseDebiteur reponseDebiteur) {
+        List<Action> actions = actionService.getActionsByReponseDebiteur(reponseDebiteur);
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/reponse/{reponseDebiteur}")
+    public ResponseEntity<List<Action>> getActionsByTypeAndReponseDebiteur(
+            @PathVariable TypeAction type, 
+            @PathVariable ReponseDebiteur reponseDebiteur) {
+        List<Action> actions = actionService.getActionsByTypeAndReponseDebiteur(type, reponseDebiteur);
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    @GetMapping("/dossier/{dossierId}/reponse/{reponseDebiteur}")
+    public ResponseEntity<List<Action>> getActionsByDossierAndReponseDebiteur(
+            @PathVariable Long dossierId, 
+            @PathVariable ReponseDebiteur reponseDebiteur) {
+        List<Action> actions = actionService.getActionsByDossierAndReponseDebiteur(dossierId, reponseDebiteur);
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    @GetMapping("/type/{type}/dossier/{dossierId}/reponse/{reponseDebiteur}")
+    public ResponseEntity<List<Action>> getActionsByTypeAndDossierAndReponseDebiteur(
+            @PathVariable TypeAction type, 
+            @PathVariable Long dossierId, 
+            @PathVariable ReponseDebiteur reponseDebiteur) {
+        List<Action> actions = actionService.getActionsByTypeAndDossierAndReponseDebiteur(type, dossierId, reponseDebiteur);
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    // Statistics Operations for ReponseDebiteur
+    @GetMapping("/statistiques/reponse-debiteur")
+    public ResponseEntity<List<Object[]>> getActionCountByReponseDebiteur() {
+        List<Object[]> statistics = actionService.getActionCountByReponseDebiteur();
+        return new ResponseEntity<>(statistics, HttpStatus.OK);
+    }
+    
+    @GetMapping("/statistiques/type-et-reponse-debiteur")
+    public ResponseEntity<List<Object[]>> getActionCountByTypeAndReponseDebiteur() {
+        List<Object[]> statistics = actionService.getActionCountByTypeAndReponseDebiteur();
+        return new ResponseEntity<>(statistics, HttpStatus.OK);
+    }
+    
+    @GetMapping("/reponse/{reponseDebiteur}/total-cost")
+    public ResponseEntity<Double> getTotalCostByReponseDebiteur(@PathVariable ReponseDebiteur reponseDebiteur) {
+        Double totalCost = actionService.calculateTotalCostByReponseDebiteur(reponseDebiteur);
+        return new ResponseEntity<>(totalCost, HttpStatus.OK);
+    }
+    
+    // Specific ReponseDebiteur Operations
+    @GetMapping("/reponse-positive")
+    public ResponseEntity<List<Action>> getActionsWithPositiveResponse() {
+        List<Action> actions = actionService.getActionsWithPositiveResponse();
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    @GetMapping("/reponse-negative")
+    public ResponseEntity<List<Action>> getActionsWithNegativeResponse() {
+        List<Action> actions = actionService.getActionsWithNegativeResponse();
+        return new ResponseEntity<>(actions, HttpStatus.OK);
+    }
+    
+    @GetMapping("/sans-reponse")
+    public ResponseEntity<List<Action>> getActionsWithoutResponse() {
+        List<Action> actions = actionService.getActionsWithoutResponse();
         return new ResponseEntity<>(actions, HttpStatus.OK);
     }
 }

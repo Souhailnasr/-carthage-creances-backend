@@ -22,7 +22,8 @@ public class Action implements Serializable {
 
     @Enumerated(EnumType.STRING)
     private TypeAction type;  // Exemple: RELANCE, SAISIE, MISE_EN_DEMEURE
-
+    @Enumerated(EnumType.STRING)
+    private ReponseDebiteur  reponseDebiteur;
     private LocalDate dateAction;
 
     // Nombre de fois que l’action a été effectuée

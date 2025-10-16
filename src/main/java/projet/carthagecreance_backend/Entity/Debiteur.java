@@ -26,7 +26,6 @@ public class Debiteur implements Serializable {
     private String codeCreance;
     @NotBlank(message = "Le nom est obligatoire")
     private String nom;
-    @NotBlank(message = "Le prénom est obligatoire")
     private String prenom;
     private String adresseElue;
     private String ville;
@@ -35,8 +34,9 @@ public class Debiteur implements Serializable {
     private String telephone;
     private String fax;
     @Email(message = "Email invalide")
-    @NotBlank(message = "L'email est obligatoire")
     private String email;
+    @Enumerated(EnumType.STRING)
+    private Type type;
     // Relation corrigée : Un débiteur peut avoir plusieurs dossiers
     @OneToMany(mappedBy = "debiteur") // mappedBy pointe vers le champ 'debiteur' dans Dossier
     @JsonIgnore

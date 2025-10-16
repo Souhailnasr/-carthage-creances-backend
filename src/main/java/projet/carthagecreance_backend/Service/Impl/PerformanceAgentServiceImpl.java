@@ -7,7 +7,7 @@ import projet.carthagecreance_backend.Entity.PerformanceAgent;
 import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Enquette;
-import projet.carthagecreance_backend.Entity.DossierStatus;
+import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Repository.PerformanceAgentRepository;
 import projet.carthagecreance_backend.Repository.UtilisateurRepository;
 import projet.carthagecreance_backend.Repository.DossierRepository;
@@ -449,7 +449,7 @@ public class PerformanceAgentServiceImpl implements PerformanceAgentService {
         
         // Calculer les dossiers validés
         long dossiersValides = dossiersTraites.stream()
-                .filter(d -> d.getDossierStatus() == DossierStatus.CLOTURE)
+                .filter(d -> d.getDossierStatus() == Statut.CLOTURE)
                 .count();
         performance.setDossiersValides((int) dossiersValides);
         
