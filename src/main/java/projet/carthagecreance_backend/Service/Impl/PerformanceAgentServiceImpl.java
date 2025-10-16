@@ -449,7 +449,7 @@ public class PerformanceAgentServiceImpl implements PerformanceAgentService {
         
         // Calculer les dossiers validés
         long dossiersValides = dossiersTraites.stream()
-                .filter(d -> d.getDossierStatus() == Statut.CLOTURE)
+                .filter(d -> d.getStatut() ==Statut.VALIDE )
                 .count();
         performance.setDossiersValides((int) dossiersValides);
         

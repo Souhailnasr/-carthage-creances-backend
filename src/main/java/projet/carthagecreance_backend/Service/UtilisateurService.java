@@ -3,6 +3,7 @@ package projet.carthagecreance_backend.Service;
 import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Entity.RoleUtilisateur;
 import projet.carthagecreance_backend.Entity.PerformanceAgent;
+import projet.carthagecreance_backend.PayloadResponse.AuthenticationResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,7 +21,7 @@ public interface UtilisateurService {
      * @param utilisateur L'utilisateur à créer
      * @return L'utilisateur créé
      */
-    Utilisateur createUtilisateur(Utilisateur utilisateur);
+    AuthenticationResponse createUtilisateur(Utilisateur utilisateur);
     
     /**
      * Récupère un utilisateur par son ID

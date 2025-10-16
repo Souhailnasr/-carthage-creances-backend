@@ -1,14 +1,18 @@
 package projet.carthagecreance_backend.Controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.*;
+import projet.carthagecreance_backend.PayloadResponse.AuthenticationResponse;
 import projet.carthagecreance_backend.Service.UtilisateurService;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Contrôleur REST complet pour la gestion des utilisateurs avec workflow
@@ -41,15 +45,32 @@ public class UtilisateurController {
      * }
      */
     @PostMapping
-    public ResponseEntity<?> createUtilisateur(@RequestBody Utilisateur utilisateur) {
+    public ResponseEntity<AuthenticationResponse> createUtilisateur(@RequestBody Utilisateur utilisateur,
+                                                                    BindingResult result) {
         try {
-            Utilisateur createdUtilisateur = utilisateurService.createUtilisateur(utilisateur);
-            return new ResponseEntity<>(createdUtilisateur, HttpStatus.CREATED);
+            System.out.println("===== DÉBUT CONTROLLER createUtilisateur =====");
+            System.out.println("Utilisateur reçu: " + utilisateur.getEmail());
+            
+            if (result.hasErrors()) {
+                List<String> errors = result.getAllErrors().stream().map(DefaultMessageSourceResolvable::getDefaultMessage)
+                        .collect(Collectors.toList());
+                return ResponseEntity.badRequest().body(AuthenticationResponse.builder().errors(errors).build());
+            }
+            
+            System.out.println("Appel du service...");
+            AuthenticationResponse response = utilisateurService.createUtilisateur(utilisateur);
+            System.out.println("Service appelé avec succès, token: " + (response.getToken() != null ? "PRÉSENT" : "ABSENT"));
+            
+            return ResponseEntity.ok(response);
+            
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            System.out.println("Erreur IllegalArgumentException dans le contrôleur: " + e.getMessage());
+            return ResponseEntity.badRequest().body(AuthenticationResponse.builder().errors(List.of(e.getMessage())).build());
         } catch (Exception e) {
+            System.out.println("Erreur Exception dans le contrôleur: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Erreur lors de la création de l'utilisateur: " + e.getMessage());
+                    .body(AuthenticationResponse.builder().errors(List.of("Erreur interne du serveur: " + e.getMessage())).build());
         }
     }
 

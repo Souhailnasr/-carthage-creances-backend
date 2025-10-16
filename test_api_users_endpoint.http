@@ -1,0 +1,53 @@
+### Test de l'endpoint /api/users pour création d'utilisateur
+### Utilisez ce fichier avec l'extension REST Client dans VS Code
+
+### 1. Créer un utilisateur SUPER_ADMIN
+POST http://localhost:8089/carthage-creance/api/users
+Content-Type: application/json
+
+{
+  "nom": "Admin",
+  "prenom": "System",
+  "email": "admin@carthage.com",
+  "motDePasse": "admin123",
+  "roleUtilisateur": "SUPER_ADMIN"
+}
+
+### 2. Créer un utilisateur AGENT_DOSSIER
+POST http://localhost:8089/carthage-creance/api/users
+Content-Type: application/json
+
+{
+  "nom": "Agent",
+  "prenom": "Test",
+  "email": "agent@carthage.com",
+  "motDePasse": "agent123",
+  "roleUtilisateur": "AGENT_DOSSIER"
+}
+
+### 3. Créer un utilisateur CHEF_DEPARTEMENT_DOSSIER
+POST http://localhost:8089/carthage-creance/api/users
+Content-Type: application/json
+
+{
+  "nom": "Chef",
+  "prenom": "Departement",
+  "email": "chef@carthage.com",
+  "motDePasse": "chef123",
+  "roleUtilisateur": "CHEF_DEPARTEMENT_DOSSIER"
+}
+
+### 4. Tester l'authentification avec l'utilisateur créé
+POST http://localhost:8089/carthage-creance/auth/authenticate
+Content-Type: application/json
+
+{
+  "email": "admin@carthage.com",
+  "password": "admin123"
+}
+
+### 5. Vérifier tous les utilisateurs
+GET http://localhost:8089/carthage-creance/api/users
+
+### 6. Vérifier un utilisateur par ID
+GET http://localhost:8089/carthage-creance/api/users/1

@@ -2,10 +2,13 @@
 package projet.carthagecreance_backend.Service.Impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.Entity.*;
+import projet.carthagecreance_backend.PayloadResponse.AuthenticationResponse;
 import projet.carthagecreance_backend.Repository.*;
+import projet.carthagecreance_backend.SecurityConfig.JwtService;
 import projet.carthagecreance_backend.Service.UtilisateurService;
 import projet.carthagecreance_backend.Service.NotificationService;
 import projet.carthagecreance_backend.Service.TacheUrgenteService;
@@ -34,6 +37,15 @@ public class UtilisateurServiceImpl implements UtilisateurService {
     private NotificationService notificationService;
 
     @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private JwtService jwtService;
+
+    @Autowired
+    private TokenRepository tokenRepository;
+
+    @Autowired
     private TacheUrgenteService tacheUrgenteService;
 
     @Autowired
@@ -44,8 +56,12 @@ public class UtilisateurServiceImpl implements UtilisateurService {
      * Vérifie les droits de création et envoie des notifications
      */
     @Override
-    public Utilisateur createUtilisateur(Utilisateur utilisateur) {
+    public AuthenticationResponse createUtilisateur(Utilisateur utilisateur) {
         try {
+            System.out.println("===== DÉBUT createUtilisateur =====");
+            System.out.println("Email: " + utilisateur.getEmail());
+            System.out.println("Mot de passe reçu: " + utilisateur.getMotDePasse());
+            
             // 1. Vérifier l'unicité de l'email
             if (utilisateurRepository.existsByEmail(utilisateur.getEmail())) {
                 throw new IllegalArgumentException("Un utilisateur avec cet email existe déjà.");
@@ -56,40 +72,81 @@ public class UtilisateurServiceImpl implements UtilisateurService {
                 throw new IllegalArgumentException("Le rôle utilisateur est obligatoire.");
             }
 
-            // 3. Sauvegarder l'utilisateur
+            // 3. Encoder le mot de passe
+            String encodedPassword = passwordEncoder.encode(utilisateur.getMotDePasse());
+            System.out.println("Mot de passe crypté: " + encodedPassword);
+            utilisateur.setMotDePasse(encodedPassword);
+
+            // 4. Sauvegarder l'utilisateur
             Utilisateur savedUtilisateur = utilisateurRepository.save(utilisateur);
+            System.out.println("Utilisateur sauvegardé avec ID: " + savedUtilisateur.getId());
 
-            // 4. Envoyer une notification de création
-            Notification notification = Notification.builder()
-                    .utilisateur(savedUtilisateur)
-                    .titre("Compte créé avec succès")
-                    .message("Votre compte a été créé avec le rôle: " + savedUtilisateur.getRoleUtilisateur())
-                    .type(TypeNotification.INFO)
-                    .entiteId(savedUtilisateur.getId())
-                    .entiteType(TypeEntite.UTILISATEUR)
-                    .dateCreation(LocalDateTime.now())
-                    .build();
-            notificationService.createNotification(notification);
+            // 5. Générer le token JWT
+            var jwtToken = jwtService.generateToken(savedUtilisateur);
+            System.out.println("Token généré: " + jwtToken.substring(0, 20) + "...");
+            saveUserToken(savedUtilisateur, jwtToken);
+            System.out.println("Token sauvegardé");
 
-            // 5. Si c'est un agent, créer une performance initiale
-            if (estAgent(savedUtilisateur.getRoleUtilisateur())) {
-                PerformanceAgent performance = PerformanceAgent.builder()
-                        .agent(savedUtilisateur)
-                        .periode(getPeriodeActuelle())
-                        .score(0.0)
-                        .objectif(80)
-                        .tauxReussite(0.0)
-                        .dateCalcul(LocalDateTime.now())
+            // 6. Envoyer une notification de création (optionnel, peut causer des erreurs)
+            try {
+                Notification notification = Notification.builder()
+                        .utilisateur(savedUtilisateur)
+                        .titre("Compte créé avec succès")
+                        .message("Votre compte a été créé avec le rôle: " + savedUtilisateur.getRoleUtilisateur())
+                        .type(TypeNotification.INFO)
+                        .entiteId(savedUtilisateur.getId())
+                        .entiteType(TypeEntite.UTILISATEUR)
+                        .dateCreation(LocalDateTime.now())
                         .build();
-                performanceAgentRepository.save(performance);
+                notificationService.createNotification(notification);
+            } catch (Exception e) {
+                System.out.println("Erreur lors de la création de la notification (non bloquant): " + e.getMessage());
             }
 
-            return savedUtilisateur;
+            // 7. Si c'est un agent, créer une performance initiale (optionnel, peut causer des erreurs)
+            try {
+                if (estAgent(savedUtilisateur.getRoleUtilisateur())) {
+                    PerformanceAgent performance = PerformanceAgent.builder()
+                            .agent(savedUtilisateur)
+                            .periode(getPeriodeActuelle())
+                            .score(0.0)
+                            .objectif(80)
+                            .tauxReussite(0.0)
+                            .dateCalcul(LocalDateTime.now())
+                            .build();
+                    performanceAgentRepository.save(performance);
+                }
+            } catch (Exception e) {
+                System.out.println("Erreur lors de la création de la performance (non bloquant): " + e.getMessage());
+            }
+
+            AuthenticationResponse response = AuthenticationResponse.builder()
+                    .token(jwtToken)
+                    .build();
+            
+            System.out.println("===== FIN createUtilisateur - Token retourné =====");
+            return response;
+
         } catch (IllegalArgumentException e) {
+            System.out.println("Erreur IllegalArgumentException: " + e.getMessage());
             throw e;
         } catch (Exception e) {
+            System.out.println("Erreur Exception: " + e.getMessage());
+            e.printStackTrace();
             throw new RuntimeException("Erreur lors de la création de l'utilisateur : " + e.getMessage(), e);
         }
+    }
+
+    private void saveUserToken(Utilisateur user, String jwtToken) {
+        var token = Token.builder()
+                .user(user)
+                .token(jwtToken)
+                .tokenType(TokenType.BEARER)
+                .expired(false)
+                .revoked(false)
+                .expireAt(LocalDateTime.now().plusHours(1)) // Token expire dans 1 heure
+                .build();
+        tokenRepository.save(token);
     }
 
     @Override

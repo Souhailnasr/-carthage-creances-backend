@@ -104,12 +104,12 @@ public class Utilisateur implements UserDetails {
 
     @Override
     public String getPassword() {
-        return "";
+        return motDePasse;
     }
 
     @Override
     public String getUsername() {
-        return "";
+        return email;
     }
 
     @Override
