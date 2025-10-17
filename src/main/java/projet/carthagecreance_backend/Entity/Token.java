@@ -31,7 +31,7 @@ public class Token implements Serializable {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	public Integer TokenId;
 
-	@Column(unique = true)
+	@Column(unique = true ,name = "token", length = 2048)
 	public String token;
 
 	@Enumerated(EnumType.STRING)
