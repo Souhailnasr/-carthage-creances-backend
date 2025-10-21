@@ -41,3 +41,4 @@ VÉRIFICATIONS EN BASE:
 2. Un token doit être créé dans la table token
 3. L'utilisateur doit être créé avec le bon rôle
 */
+

@@ -11,12 +11,10 @@ import java.io.Serializable;
 import java.util.List;
 
 @Entity
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-
 public class Creancier implements Serializable {
     private static final long serialVersionUID = 1L;
 

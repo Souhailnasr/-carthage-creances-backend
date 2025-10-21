@@ -20,3 +20,4 @@ DESCRIBE creancier;
 DESCRIBE debiteur;
 
 
+

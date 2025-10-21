@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,7 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface DossierRepository extends JpaRepository<Dossier, Long> {
+public interface DossierRepository extends JpaRepository<Dossier, Long>, JpaSpecificationExecutor<Dossier> {
     
     // Rechercher par numéro de dossier
     Optional<Dossier> findByNumeroDossier(String numeroDossier);

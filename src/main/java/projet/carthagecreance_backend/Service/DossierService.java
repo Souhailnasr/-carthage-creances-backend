@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -52,6 +53,17 @@ public interface DossierService {
      * @return Liste de tous les dossiers
      */
     List<Dossier> getAllDossiers();
+
+    /**
+     * Récupère tous les dossiers avec pagination et filtres
+     * @param role Le rôle de l'utilisateur pour filtrer les dossiers
+     * @param userId L'ID de l'utilisateur pour filtrer les dossiers
+     * @param page Numéro de page
+     * @param size Taille de la page
+     * @param search Terme de recherche
+     * @return Map contenant les dossiers paginés et les métadonnées
+     */
+    Map<String, Object> getAllDossiersWithPagination(String role, Long userId, int page, int size, String search);
     
     /**
      * Met à jour un dossier avec validation

@@ -14,6 +14,10 @@ import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Service.DossierService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import projet.carthagecreance_backend.Service.FileStorageService;
+import projet.carthagecreance_backend.SecurityServices.UserExtractionService;
+import projet.carthagecreance_backend.Entity.Utilisateur;
+import projet.carthagecreance_backend.Entity.RoleUtilisateur;
+import projet.carthagecreance_backend.Entity.DossierStatus;
 
 import java.util.Date;
 import java.util.List;
@@ -45,6 +49,16 @@ public class DossierController {
     
     @Autowired
     private FileStorageService fileStorageService;
+    
+    @Autowired
+    private UserExtractionService userExtractionService;
+
+    // Méthode utilitaire pour déterminer si un rôle est chef
+    private boolean isChef(RoleUtilisateur role) {
+        return role == RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER || 
+               role == RoleUtilisateur.SUPER_ADMIN;
+    }
+
 
     // ==================== MÉTHODES DE VALIDATION ====================
     
@@ -117,9 +131,19 @@ public class DossierController {
             @RequestPart("dossier") DossierRequest request,
             @RequestPart(value = "contratSigne", required = false) MultipartFile contratSigne,
             @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir,
-            @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef) {
+            @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef,
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
 
         try {
+            // Extraire l'utilisateur connecté depuis le token
+            Utilisateur utilisateurConnecte = null;
+            if (authHeader != null) {
+                utilisateurConnecte = userExtractionService.extractUserFromToken(authHeader);
+                if (utilisateurConnecte == null) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Token invalide"));
+                }
+            }
+
             // Validation des fichiers avant traitement
             validatePdfFile(contratSigne, "contratSigne");
             validatePdfFile(pouvoir, "pouvoir");
@@ -132,9 +156,21 @@ public class DossierController {
                 request.setPouvoirFile(pouvoir);
             }
 
-            // Assigner le statut selon le rôle
-            if (!isChef) {
-                request.setStatut(Statut.EN_ATTENTE_VALIDATION);
+            // Déterminer le rôle et le statut selon l'utilisateur connecté
+            if (utilisateurConnecte != null) {
+                boolean createurEstChef = isChef(utilisateurConnecte.getRoleUtilisateur());
+                if (createurEstChef) {
+                    request.setStatut(Statut.VALIDE);
+                    request.setAgentCreateurId(utilisateurConnecte.getId());
+                } else {
+                    request.setStatut(Statut.EN_ATTENTE_VALIDATION);
+                    request.setAgentCreateurId(utilisateurConnecte.getId());
+                }
+            } else {
+                // Fallback si pas de token
+                if (!isChef) {
+                    request.setStatut(Statut.EN_ATTENTE_VALIDATION);
+                }
             }
 
             Dossier createdDossier = dossierService.createDossier(request);
@@ -263,50 +299,72 @@ public class DossierController {
     }
 
     /**
-     * Récupère tous les dossiers
+     * Récupère tous les dossiers avec filtres optionnels et pagination
      * 
-     * @return ResponseEntity avec la liste de tous les dossiers (200 OK)
+     * @param role Le rôle de l'utilisateur pour filtrer les dossiers
+     * @param userId L'ID de l'utilisateur pour filtrer les dossiers
+     * @param page Numéro de page (défaut: 0)
+     * @param size Taille de la page (défaut: 10)
+     * @param search Terme de recherche dans titre, numeroDossier, description
+     * @param authHeader Le token d'authentification
+     * @return ResponseEntity avec la page des dossiers (200 OK) ou erreur (400 BAD_REQUEST)
      * 
      * @example
+     * GET /api/dossiers?role=AGENT&userId=123&page=0&size=10&search=client
+     * GET /api/dossiers?role=CHEF&page=0&size=5
+     * GET /api/dossiers?search=urgent
      * GET /api/dossiers
      */
     @GetMapping
-    public ResponseEntity<List<Dossier>> getAllDossiers(
+    public ResponseEntity<?> getAllDossiers(
             @RequestParam(name = "role", required = false) String role,
-            @RequestParam(name = "userId", required = false) Long userId) {
+            @RequestParam(name = "userId", required = false) Long userId,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "10") int size,
+            @RequestParam(name = "search", required = false) String search,
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+        
+        logger.info("=== DÉBUT getAllDossiers ===");
+        logger.info("Paramètres reçus - role: {}, userId: {}, page: {}, size: {}, search: {}", 
+                   role, userId, page, size, search);
+        
         try {
-            // Si chef (ou pas de rôle fourni), renvoyer tous les dossiers
-            if (role == null || role.toUpperCase().startsWith("CHEF")) {
-                return new ResponseEntity<>(dossierService.getAllDossiers(), HttpStatus.OK);
+            // Validation des paramètres
+            if (page < 0) {
+                logger.warn("Numéro de page invalide: {}", page);
+                return ResponseEntity.badRequest().body(Map.of("error", "Le numéro de page doit être >= 0"));
+            }
+            if (size <= 0 || size > 100) {
+                logger.warn("Taille de page invalide: {}", size);
+                return ResponseEntity.badRequest().body(Map.of("error", "La taille de page doit être entre 1 et 100"));
             }
 
-            // Si agent: ne voit que ses dossiers (créés ou responsables) avec statuts autorisés
-            if (role.toUpperCase().startsWith("AGENT")) {
+            // Extraire l'ID utilisateur depuis le token si pas fourni
+            if (userId == null && authHeader != null) {
+                userId = userExtractionService.extractUserIdFromToken(authHeader);
                 if (userId == null) {
-                    return ResponseEntity.badRequest().build();
+                    logger.warn("Impossible d'extraire l'ID utilisateur depuis le token");
+                    return ResponseEntity.badRequest().body(Map.of("error", "Token invalide ou utilisateur non trouvé"));
                 }
-                List<Dossier> responsablesAttente = dossierService.getDossiersParAgentEtStatut(userId, Statut.EN_ATTENTE_VALIDATION);
-                List<Dossier> responsablesValides = dossierService.getDossiersParAgentEtStatut(userId, Statut.VALIDE);
-                List<Dossier> crees = dossierService.getDossiersCreesByAgent(userId);
-                // Filtrer les créés par statuts autorisés
-                crees = crees.stream()
-                        .filter(d -> d.getStatut() == Statut.EN_ATTENTE_VALIDATION || d.getStatut() == Statut.VALIDE)
-                        .toList();
-
-                // Fusionner et dédupliquer
-                List<Dossier> result = new java.util.ArrayList<>();
-                result.addAll(responsablesAttente);
-                result.addAll(responsablesValides);
-                result.addAll(crees);
-                result = result.stream().distinct().toList();
-                return ResponseEntity.ok(result);
+                logger.info("ID utilisateur extrait du token: {}", userId);
             }
 
-            // Rôle inconnu
-            return ResponseEntity.badRequest().build();
+            // Appel du service avec pagination
+            Map<String, Object> result = dossierService.getAllDossiersWithPagination(role, userId, page, size, search);
+            
+            logger.info("Résultat - totalElements: {}, totalPages: {}, currentPage: {}, size: {}", 
+                       result.get("totalElements"), result.get("totalPages"), 
+                       result.get("currentPage"), result.get("size"));
+
+            return ResponseEntity.ok(result);
+
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation dans getAllDossiers: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            logger.error("Erreur getAllDossiers avec filtres: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            logger.error("Erreur getAllDossiers avec filtres: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur interne du serveur: " + e.getMessage()));
         }
     }
 
@@ -608,8 +666,11 @@ public class DossierController {
                     return ResponseEntity.badRequest().body(Map.of("error", "agentId requis pour role=AGENT"));
                 }
                 // Stats restreintes à l'agent (créés + responsables)
-                List<Dossier> visibles = getAllDossiers("AGENT", agentId).getBody();
-                if (visibles == null) visibles = java.util.List.of();
+                ResponseEntity<?> response = getAllDossiers("AGENT", agentId, 0, 1000, null, null);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> result = (Map<String, Object>) response.getBody();
+                @SuppressWarnings("unchecked")
+                List<Dossier> visibles = result != null ? (List<Dossier>) result.get("content") : java.util.List.of();
                 long total = visibles.size();
                 long valides = visibles.stream().filter(d -> d.getStatut() == Statut.VALIDE).count();
                 long enCours = visibles.stream().filter(d -> d.getStatut() == Statut.EN_ATTENTE_VALIDATION).count();

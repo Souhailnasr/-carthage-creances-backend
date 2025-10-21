@@ -33,7 +33,8 @@ public class JwtService implements Serializable {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private static final String SECRET_KEY = "2A472D4B6150645367566B59703373367639792442264528482B4D6251655468";
+	@Value("${application.security.jwt.secret-key}")
+	private String secretKey;
 	
 	private static final BytesKeyGenerator DEFAULT_TOKEN_GENERATOR = KeyGenerators.secureRandom(15);
 
@@ -88,7 +89,7 @@ public class JwtService implements Serializable {
 	}
 
 	private Key getSignInKey() {
-		byte[] keyBytes = Decoders.BASE64.decode(SECRET_KEY);
+		byte[] keyBytes = Decoders.BASE64.decode(secretKey);
 		return Keys.hmacShaKeyFor(keyBytes);
 	}
 	

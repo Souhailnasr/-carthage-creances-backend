@@ -90,7 +90,6 @@ public interface ValidationDossierService {
      * @param chefId L'ID du chef qui valide
      * @param commentaire Le commentaire de validation
      * @return La validation mise à jour
-     * @throws RuntimeException si le dossier n'existe pas ou si le chef n'a pas les droits
      */
     ValidationDossier validerDossier(Long dossierId, Long chefId, String commentaire);
 
@@ -100,7 +99,6 @@ public interface ValidationDossierService {
      * @param chefId L'ID du chef qui rejette
      * @param commentaire Le commentaire de rejet
      * @return La validation mise à jour
-     * @throws RuntimeException si le dossier n'existe pas ou si le chef n'a pas les droits
      */
     ValidationDossier rejeterDossier(Long dossierId, Long chefId, String commentaire);
 
@@ -109,7 +107,6 @@ public interface ValidationDossierService {
      * @param validationId L'ID de la validation
      * @param commentaire Le commentaire de remise en attente
      * @return La validation mise à jour
-     * @throws RuntimeException si la validation n'existe pas
      */
     ValidationDossier remettreEnAttente(Long validationId, String commentaire);
 

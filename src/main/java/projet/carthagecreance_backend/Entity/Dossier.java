@@ -2,6 +2,7 @@ package projet.carthagecreance_backend.Entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.io.Serializable;
@@ -46,7 +47,9 @@ public class Dossier implements Serializable {
     @Enumerated(EnumType.STRING)
     private Urgence urgence;
     @Enumerated(EnumType.STRING)
-    private DossierStatus dossierStatus;
+    @Column(name = "dossier_status", nullable = false)
+    @NotNull
+    private DossierStatus dossierStatus = DossierStatus.ENCOURSDETRAITEMENT;
 
     @Enumerated(EnumType.STRING)
     private Statut statut;

@@ -254,8 +254,10 @@ public class ValidationDossierController {
             @RequestParam Long chefId,
             @RequestParam(required = false) String commentaire) {
         try {
-            ValidationDossier validation = validationDossierService.validerDossier(id, chefId, commentaire);
-            return ResponseEntity.ok(validation);
+            // Récupérer la validation pour obtenir le dossier
+            ValidationDossier validation = validationDossierService.getValidationDossierById(id);
+            ValidationDossier result = validationDossierService.validerDossier(validation.getDossier().getId(), chefId, commentaire);
+            return ResponseEntity.ok(result);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
@@ -280,8 +282,10 @@ public class ValidationDossierController {
             @RequestParam Long chefId,
             @RequestParam(required = false) String commentaire) {
         try {
-            ValidationDossier validation = validationDossierService.rejeterDossier(id, chefId, commentaire);
-            return ResponseEntity.ok(validation);
+            // Récupérer la validation pour obtenir le dossier
+            ValidationDossier validation = validationDossierService.getValidationDossierById(id);
+            ValidationDossier result = validationDossierService.rejeterDossier(validation.getDossier().getId(), chefId, commentaire);
+            return ResponseEntity.ok(result);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {

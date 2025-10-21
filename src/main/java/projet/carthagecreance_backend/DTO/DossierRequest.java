@@ -8,9 +8,15 @@ import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Entity.TypeDocumentJustificatif; // Ajout
 import projet.carthagecreance_backend.Entity.Type; // Ajout type personne
 
-@Getter
-@Setter
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class DossierRequest {
     private String titre;
     private String description;

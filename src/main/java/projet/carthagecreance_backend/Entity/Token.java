@@ -41,6 +41,19 @@ public class Token implements Serializable {
 
 	public boolean expired;
 	
+	// Getters et setters pour compatibilité
+	public String getToken() { return token; }
+	public void setToken(String token) { this.token = token; }
+	
+	public boolean isExpired() { return expired; }
+	public void setExpired(boolean expired) { this.expired = expired; }
+	
+	public boolean isRevoked() { return revoked; }
+	public void setRevoked(boolean revoked) { this.revoked = revoked; }
+	
+	public LocalDateTime getExpireAt() { return expireAt; }
+	public void setExpireAt(LocalDateTime expireAt) { this.expireAt = expireAt; }
+	
 	@CreationTimestamp
     @Column(updatable = false)
     private Timestamp timeStamp;

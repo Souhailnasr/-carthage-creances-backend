@@ -18,8 +18,15 @@ import java.time.LocalDateTime;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.persistence.criteria.Predicate;
 
 /**
  * Implémentation du service de gestion des dossiers avec workflow complet
@@ -507,11 +514,12 @@ public class DossierServiceImpl implements DossierService {
             throw new RuntimeException("L'utilisateur avec l'ID " + chefId + " n'est pas autorisé à valider des dossiers");
         }
 
-        // Valider le dossier (marquer comme validé et clôturer)
+        // Valider le dossier (marquer comme validé SANS clôturer)
         dossier.setValide(true);
         dossier.setDateValidation(LocalDateTime.now());
         dossier.setStatut(Statut.VALIDE);
-        dossier.setDateCloture(new Date());
+        dossier.setDossierStatus(DossierStatus.ENCOURSDETRAITEMENT);
+        // dateCloture reste NULL - sera assignée seulement lors de la clôture explicite
         dossierRepository.save(dossier);
 
         // Mettre à jour la validation
@@ -660,5 +668,105 @@ public class DossierServiceImpl implements DossierService {
         if (utilisateur == null || utilisateur.getRoleUtilisateur() == null) return false;
         String roleName = utilisateur.getRoleUtilisateur().name();
         return roleName.startsWith("CHEF_DEPARTEMENT");
+    }
+
+    @Override
+    public Map<String, Object> getAllDossiersWithPagination(String role, Long userId, int page, int size, String search) {
+        logger.info("=== DÉBUT getAllDossiersWithPagination ===");
+        logger.info("Paramètres - role: {}, userId: {}, page: {}, size: {}, search: {}", role, userId, page, size, search);
+
+        try {
+            // Créer la spécification pour les filtres
+            Specification<Dossier> spec = createDossierSpecification(role, userId, search);
+            
+            // Créer la pagination avec tri par date de création (plus récent en premier)
+            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "dateCreation"));
+            
+            // Exécuter la requête paginée avec gestion d'erreurs robuste
+            Page<Dossier> dossierPage;
+            try {
+                logger.info("Tentative de récupération des dossiers avec pagination...");
+                dossierPage = dossierRepository.findAll(spec, pageable);
+                logger.info("Récupération réussie: {} dossiers trouvés", dossierPage.getContent().size());
+                
+            } catch (Exception e) {
+                logger.error("Erreur lors de la récupération des dossiers: {}", e.getMessage());
+                
+                // Gestion spécifique de l'erreur d'enum
+                if (e.getMessage().contains("No enum constant") || e.getMessage().contains("DossierStatus")) {
+                    logger.error("ERREUR CRITIQUE: Valeurs invalides dans dossier_status détectées!");
+                    logger.error("Détails de l'erreur: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+                    
+                    // Retourner une page vide avec message d'erreur explicite
+                    dossierPage = new org.springframework.data.domain.PageImpl<>(
+                        new java.util.ArrayList<>(), 
+                        pageable, 
+                        0
+                    );
+                    
+                    logger.error("SOLUTION REQUISE: Exécutez le script de nettoyage de la base de données");
+                    throw new RuntimeException("Erreur de données dans la base de données. Valeurs invalides détectées dans dossier_status. Veuillez exécuter le script de nettoyage.", e);
+                    
+                } else {
+                    logger.error("Erreur inattendue: {}", e.getMessage());
+                    throw new RuntimeException("Erreur lors de la récupération des dossiers: " + e.getMessage(), e);
+                }
+            }
+            
+            logger.info("Résultat pagination - totalElements: {}, totalPages: {}, currentPage: {}, size: {}", 
+                       dossierPage.getTotalElements(), dossierPage.getTotalPages(), 
+                       dossierPage.getNumber(), dossierPage.getSize());
+
+            // Construire la réponse
+            Map<String, Object> result = Map.of(
+                "content", dossierPage.getContent(),
+                "totalElements", dossierPage.getTotalElements(),
+                "totalPages", dossierPage.getTotalPages(),
+                "currentPage", dossierPage.getNumber(),
+                "size", dossierPage.getSize(),
+                "first", dossierPage.isFirst(),
+                "last", dossierPage.isLast(),
+                "numberOfElements", dossierPage.getNumberOfElements()
+            );
+
+            return result;
+
+        } catch (Exception e) {
+            logger.error("Erreur dans getAllDossiersWithPagination: {}", e.getMessage(), e);
+            throw new RuntimeException("Erreur lors de la récupération des dossiers paginés: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Crée une spécification JPA pour filtrer les dossiers
+     */
+    private Specification<Dossier> createDossierSpecification(String role, Long userId, String search) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new java.util.ArrayList<>();
+
+            // Filtre par rôle et utilisateur
+            if (role != null && role.toUpperCase().startsWith("AGENT") && userId != null) {
+                // Agent ne voit que ses dossiers (créés ou responsables)
+                Predicate agentCreateur = criteriaBuilder.equal(root.get("agentCreateur").get("id"), userId);
+                Predicate agentResponsable = criteriaBuilder.equal(root.get("agentResponsable").get("id"), userId);
+                predicates.add(criteriaBuilder.or(agentCreateur, agentResponsable));
+            }
+            // Pour les chefs, pas de filtre supplémentaire (ils voient tous les dossiers)
+
+            // Filtre par recherche textuelle
+            if (search != null && !search.trim().isEmpty()) {
+                String searchPattern = "%" + search.toLowerCase() + "%";
+                Predicate titreMatch = criteriaBuilder.like(
+                    criteriaBuilder.lower(root.get("titre")), searchPattern);
+                Predicate numeroMatch = criteriaBuilder.like(
+                    criteriaBuilder.lower(root.get("numeroDossier")), searchPattern);
+                Predicate descriptionMatch = criteriaBuilder.like(
+                    criteriaBuilder.lower(root.get("description")), searchPattern);
+                
+                predicates.add(criteriaBuilder.or(titreMatch, numeroMatch, descriptionMatch));
+            }
+
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
     }
 }

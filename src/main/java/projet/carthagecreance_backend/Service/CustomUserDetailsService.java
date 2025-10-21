@@ -9,6 +9,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import projet.carthagecreance_backend.Entity.Utilisateur;
+import projet.carthagecreance_backend.Entity.RoleUtilisateur;
 
 import java.util.ArrayList;
 import java.util.Collection;

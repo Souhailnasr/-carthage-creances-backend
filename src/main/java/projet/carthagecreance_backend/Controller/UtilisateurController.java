@@ -11,8 +11,11 @@ import projet.carthagecreance_backend.PayloadResponse.AuthenticationResponse;
 import projet.carthagecreance_backend.Service.UtilisateurService;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Contrôleur REST complet pour la gestion des utilisateurs avec workflow
@@ -22,6 +25,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/users")
 @CrossOrigin(origins = "http://localhost:4200")
 public class UtilisateurController {
+
+    private static final Logger logger = LoggerFactory.getLogger(UtilisateurController.class);
 
     @Autowired
     private UtilisateurService utilisateurService;
@@ -76,10 +81,10 @@ public class UtilisateurController {
 
     /**
      * Récupère un utilisateur par son ID
-     *
+     * 
      * @param id L'ID de l'utilisateur
      * @return ResponseEntity avec l'utilisateur trouvé (200 OK) ou erreur (404 NOT_FOUND)
-     *
+     * 
      * @example
      * GET /api/users/1
      */
@@ -89,6 +94,7 @@ public class UtilisateurController {
         return utilisateur.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
+
 
     /**
      * Récupère tous les utilisateurs
@@ -177,7 +183,7 @@ public class UtilisateurController {
     }
 
     @GetMapping("/email/{email}")
-    public ResponseEntity<Utilisateur> getUtilisateurByEmail(@PathVariable String email) {
+    public ResponseEntity<Utilisateur> getUtilisateurByEmailSimple(@PathVariable String email) {
         Optional<Utilisateur> utilisateur = utilisateurService.getUtilisateurByEmail(email);
         return utilisateur.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
@@ -369,6 +375,98 @@ public class UtilisateurController {
     }
 
     // ==================== ENDPOINTS DE VALIDATION DES RÔLES ====================
+
+    /**
+     * Récupère un utilisateur complet par son email
+     *
+     * @param email L'email de l'utilisateur
+     * @return ResponseEntity avec l'utilisateur complet (200 OK) ou 404 si non trouvé
+     *
+     * @example
+     * GET /api/users/by-email/{email}
+     */
+    @GetMapping("/by-email/{email}")
+    public ResponseEntity<Utilisateur> getUtilisateurByEmail(@PathVariable String email) {
+        try {
+            logger.info("=== DÉBUT getUtilisateurByEmail ===");
+            logger.info("Email reçu: {}", email);
+            
+            // Validation de l'email
+            if (email == null || email.trim().isEmpty()) {
+                logger.warn("Email vide ou null reçu");
+                return ResponseEntity.badRequest().build();
+            }
+            
+            // Recherche de l'utilisateur
+            Optional<Utilisateur> utilisateur = utilisateurService.getUtilisateurByEmail(email);
+            
+            if (utilisateur.isPresent()) {
+                Utilisateur user = utilisateur.get();
+                logger.info("Utilisateur trouvé: ID={}, Nom={}, Email={}, Role={}", 
+                           user.getId(), user.getNom(), user.getEmail(), user.getRoleUtilisateur());
+                
+                logger.info("=== FIN getUtilisateurByEmail - Utilisateur trouvé ===");
+                return ResponseEntity.ok(user);
+            } else {
+                logger.warn("Utilisateur non trouvé pour l'email: {}", email);
+                logger.info("=== FIN getUtilisateurByEmail - Utilisateur non trouvé ===");
+                return ResponseEntity.notFound().build();
+            }
+            
+        } catch (Exception e) {
+            logger.error("Erreur dans getUtilisateurByEmail: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Récupère l'ID d'un utilisateur par son email
+     *
+     * @param email L'email de l'utilisateur
+     * @return ResponseEntity avec l'ID de l'utilisateur (200 OK) ou 404 si non trouvé
+     *
+     * @example
+     * GET /api/users/by-email/{email}/id
+     */
+    @GetMapping("/by-email/{email}/id")
+    public ResponseEntity<?> getUtilisateurIdByEmail(@PathVariable String email) {
+        try {
+            logger.info("=== DÉBUT getUtilisateurIdByEmail ===");
+            logger.info("Email reçu: {}", email);
+            
+            // Validation de l'email
+            if (email == null || email.trim().isEmpty()) {
+                logger.warn("Email vide ou null reçu");
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "L'email ne peut pas être vide"));
+            }
+            
+            // Recherche de l'utilisateur
+            Optional<Utilisateur> utilisateur = utilisateurService.getUtilisateurByEmail(email);
+            
+            if (utilisateur.isPresent()) {
+                Utilisateur user = utilisateur.get();
+                logger.info("Utilisateur trouvé: ID={}, Email={}", user.getId(), user.getEmail());
+                
+                Map<String, Object> response = Map.of(
+                    "id", user.getId(),
+                    "email", user.getEmail()
+                );
+                
+                logger.info("=== FIN getUtilisateurIdByEmail - ID retourné: {} ===", user.getId());
+                return ResponseEntity.ok(response);
+            } else {
+                logger.warn("Utilisateur non trouvé pour l'email: {}", email);
+                logger.info("=== FIN getUtilisateurIdByEmail - Utilisateur non trouvé ===");
+                return ResponseEntity.notFound().build();
+            }
+            
+        } catch (Exception e) {
+            logger.error("Erreur dans getUtilisateurIdByEmail: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur interne du serveur: " + e.getMessage()));
+        }
+    }
 
     /**
      * Vérifie si un utilisateur peut créer un autre utilisateur avec un rôle donné

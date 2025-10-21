@@ -51,3 +51,4 @@ GET http://localhost:8089/carthage-creance/api/users
 
 ### 6. Vérifier un utilisateur par ID
 GET http://localhost:8089/carthage-creance/api/users/1
+
