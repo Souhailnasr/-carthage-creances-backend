@@ -1,6 +1,4 @@
 package projet.carthagecreance_backend.DTO;
-import lombok.Getter;
-import lombok.Setter;
 import org.springframework.web.multipart.MultipartFile;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.Entity.DossierStatus;

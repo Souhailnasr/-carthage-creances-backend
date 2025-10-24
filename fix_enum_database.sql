@@ -27,3 +27,4 @@ DESCRIBE dossier;
 -- 5. Vérifier les valeurs existantes
 SELECT DISTINCT statut FROM dossier;
 SELECT DISTINCT dossier_status FROM dossier;
+

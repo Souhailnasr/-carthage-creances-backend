@@ -38,3 +38,4 @@ SELECT DISTINCT statut FROM dossier;
 -- 4. Si nécessaire, mettre à jour le schéma de la colonne
 -- ALTER TABLE dossier MODIFY COLUMN dossier_status ENUM('ENCOURSDETRAITEMENT', 'CLOTURE');
 -- ALTER TABLE dossier MODIFY COLUMN statut ENUM('EN_ATTENTE_VALIDATION', 'VALIDE', 'REJETE', 'EN_COURS', 'CLOTURE');
+

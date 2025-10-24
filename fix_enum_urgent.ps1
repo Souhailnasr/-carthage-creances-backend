@@ -89,3 +89,4 @@ Write-Host "2. Testez l'endpoint /api/dossiers" -ForegroundColor White
 Write-Host "3. Vérifiez l'affichage dans le frontend" -ForegroundColor White
 
 Write-Host "`n🚀 CORRECTION TERMINÉE!" -ForegroundColor Green
+

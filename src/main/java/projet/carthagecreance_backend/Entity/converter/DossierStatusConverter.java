@@ -21,3 +21,4 @@ public class DossierStatusConverter implements AttributeConverter<DossierStatus,
         return DossierStatus.fromString(dbData);
     }
 }
+

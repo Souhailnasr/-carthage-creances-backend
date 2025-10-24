@@ -55,3 +55,4 @@ SELECT
     COUNT(dossier_status) as dossiers_avec_status,
     COUNT(*) - COUNT(dossier_status) as dossiers_sans_status
 FROM dossier;
+

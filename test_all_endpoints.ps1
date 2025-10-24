@@ -148,3 +148,4 @@ Write-Host "• GET /api/users/by-email/{email}/id - Endpoint ID seulement" -For
 Write-Host "• GET /api/dossiers - Endpoint principal des dossiers" -ForegroundColor White
 
 Write-Host "`n🚀 APPLICATION ENTIÈREMENT FONCTIONNELLE!" -ForegroundColor Green
+

@@ -103,3 +103,4 @@ Write-Host "5. ✅ Retour de l'objet Utilisateur complet" -ForegroundColor White
 Write-Host "`n🎯 ENDPOINT PRÊT À L'UTILISATION!" -ForegroundColor Green
 Write-Host "URL: GET $baseUrl/api/users/by-email/{email}" -ForegroundColor White
 Write-Host "Retourne: Objet Utilisateur complet avec ID, nom, prénom, email, rôle" -ForegroundColor White
+

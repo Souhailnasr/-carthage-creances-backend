@@ -817,3 +817,4 @@ export const routes: Routes = [
 ---
 
 **🎉 Votre frontend Angular est maintenant prêt à consommer l'API Spring Boot !**
+
