@@ -1,6 +1,9 @@
 package projet.carthagecreance_backend.Entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
@@ -16,6 +19,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class Dossier implements Serializable {
     private static final long serialVersionUID = 1L;
 
@@ -49,6 +54,7 @@ public class Dossier implements Serializable {
     @Enumerated(EnumType.STRING)
     @Column(name = "dossier_status", nullable = false)
     @NotNull
+    @Builder.Default
     private DossierStatus dossierStatus = DossierStatus.ENCOURSDETRAITEMENT;
 
     @Enumerated(EnumType.STRING)
@@ -119,6 +125,7 @@ public class Dossier implements Serializable {
     private Boolean valide = false;
 
     @Column(name = "date_validation")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime dateValidation;
 
     @Column(name = "commentaire_validation", length = 1000)

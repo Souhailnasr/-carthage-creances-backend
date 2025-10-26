@@ -38,3 +38,6 @@ GROUP BY dossier_status;
 -- 5. Vérifier la structure de la colonne
 DESCRIBE dossier;
 
+
+
+

@@ -230,3 +230,6 @@ console.log('Réponse reçue:', response);
 
 **🎯 Votre API est maintenant prête pour l'intégration frontend !**
 
+
+
+

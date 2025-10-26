@@ -138,3 +138,6 @@ Write-Host "`n🚀 ENDPOINT LEGACY PRÊT À L'UTILISATION!" -ForegroundColor Gre
 Write-Host "URL: GET $baseUrl/api/utilisateurs/by-email/{email}" -ForegroundColor White
 Write-Host "Retourne: Objet Utilisateur complet avec ID, nom, prénom, email, rôle" -ForegroundColor White
 
+
+
+
