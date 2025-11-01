@@ -107,3 +107,7 @@ Write-Host "Retourne: Objet Utilisateur complet avec ID, nom, pr√©nom, email, r√
 
 
 
+
+
+
+

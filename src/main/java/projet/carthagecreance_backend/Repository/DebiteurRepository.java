@@ -16,8 +16,13 @@ public interface DebiteurRepository extends JpaRepository<Debiteur, Long> {
     // Rechercher par code créance
     Optional<Debiteur> findByCodeCreance(String codeCreance);
     
-    // Rechercher par nom exact
-    Optional<Debiteur> findByNom(String nom);
+    // Rechercher par nom et prénom pour les personnes physiques
+    @Query("SELECT d FROM Debiteur d WHERE d.nom = :nom AND d.prenom = :prenom")
+    Optional<Debiteur> findByNomAndPrenom(@Param("nom") String nom, @Param("prenom") String prenom);
+    
+    // Rechercher par nom pour les personnes morales
+    @Query("SELECT d FROM Debiteur d WHERE d.nom = :nom")
+    Optional<Debiteur> findByNom(@Param("nom") String nom);
     
     // Rechercher par nom
     List<Debiteur> findByNomContainingIgnoreCase(String nom);
@@ -25,8 +30,10 @@ public interface DebiteurRepository extends JpaRepository<Debiteur, Long> {
     // Rechercher par prénom
     List<Debiteur> findByPrenomContainingIgnoreCase(String prenom);
     
-    // Rechercher par nom et prénom
-    List<Debiteur> findByNomAndPrenom(String nom, String prenom);
+    
+    // Rechercher par nom et prénom (retourne Optional pour éviter NonUniqueResultException)
+    @Query("SELECT d FROM Debiteur d WHERE d.nom = :nom AND d.prenom = :prenom")
+    Optional<Debiteur> findByNomAndPrenomExact(@Param("nom") String nom, @Param("prenom") String prenom);
     
     // Rechercher par email
     Optional<Debiteur> findByEmail(String email);
@@ -68,6 +75,14 @@ public interface DebiteurRepository extends JpaRepository<Debiteur, Long> {
     
     // Rechercher les débiteurs par type
     List<Debiteur> findByType(Type type);
+    
+    // Rechercher par nom et type (retourne Optional pour éviter NonUniqueResultException)
+    @Query("SELECT d FROM Debiteur d WHERE d.nom = :nom AND d.type = :type")
+    Optional<Debiteur> findByNomAndType(@Param("nom") String nom, @Param("type") Type type);
+    
+    // Rechercher par nom et prénom et type (retourne Optional pour éviter NonUniqueResultException)
+    @Query("SELECT d FROM Debiteur d WHERE d.nom = :nom AND d.prenom = :prenom AND d.type = :type")
+    Optional<Debiteur> findByNomAndPrenomAndType(@Param("nom") String nom, @Param("prenom") String prenom, @Param("type") Type type);
     
     // Rechercher les débiteurs par type et ville
     List<Debiteur> findByTypeAndVille(Type type, String ville);

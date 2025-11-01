@@ -8,6 +8,67 @@
 5. [Guards de sécurité](#guards-de-sécurité)
 6. [Composants principaux](#composants-principaux)
 7. [Endpoints API](#endpoints-api)
+8. [⚠️ IMPORTANT: Utilisation correcte de userId](#important-utilisation-correcte-de-userid)
+
+---
+
+## ⚠️ IMPORTANT: Utilisation correcte de userId
+
+### ❌ Problème courant
+
+**NE PAS** essayer d'extraire `userId` depuis le token JWT lors de la connexion initiale !
+
+Le backend retourne déjà `userId` dans la réponse d'authentification :
+
+```json
+{
+  "token": "eyJhbGc...",
+  "userId": 33,        // ✅ UTILISER CE CHAMP DIRECTEMENT
+  "email": "user@example.com",
+  "nom": "Dupont",
+  "prenom": "Jean",
+  "role": "AGENT_DOSSIER"
+}
+```
+
+### ✅ Solution correcte
+
+**Utiliser directement `userId` de la réponse d'authentification :**
+
+```typescript
+login(credentials: LoginRequest): Observable<AuthResponse> {
+  return this.http.post<AuthResponse>(`${environment.authUrl}/authenticate`, credentials)
+    .pipe(
+      tap(response => {
+        if (response.token && response.userId) {
+          // ✅ STOCKER LE TOKEN
+          localStorage.setItem('token', response.token);
+          
+          // ✅ UTILISER DIRECTEMENT userId DE LA RÉPONSE
+          const user: User = {
+            userId: response.userId,  // ← UTILISER ICI
+            nom: response.nom,
+            prenom: response.prenom,
+            email: response.email,
+            role: response.role
+          };
+          
+          // ✅ SAUVEGARDER L'UTILISATEUR
+          localStorage.setItem('currentUser', JSON.stringify(user));
+          this.currentUserSubject.next(user);
+        }
+      })
+    );
+}
+```
+
+### 🔍 Pourquoi ce problème arrive-t-il ?
+
+1. **Le token actuel peut être ancien** : Si vous utilisez un token généré avant nos corrections, il ne contiendra pas `userId` dans ses claims.
+
+2. **Solution** : Se reconnecter pour obtenir un nouveau token avec `userId` dans les claims.
+
+3. **Cependant** : La meilleure pratique est d'utiliser directement `userId` de la réponse d'authentification, pas de l'extraire du token.
 
 ---
 
@@ -66,11 +127,17 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   token: string;
-  errors?: string[];
+  errors?: string[] | null;
+  userId: number;  // ✅ IMPORTANT: userId est inclus dans la réponse
+  email: string;
+  nom: string;
+  prenom: string;
+  role: string;
 }
 
 export interface User {
-  id: number;
+  userId?: number;  // ✅ Utiliser userId au lieu de id pour cohérence
+  id?: number;      // Gardé pour compatibilité
   nom: string;
   prenom: string;
   email: string;
@@ -92,9 +159,25 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${environment.authUrl}/authenticate`, credentials)
       .pipe(
         tap(response => {
-          if (response.token) {
+          if (response.token && response.userId) {
+            // ✅ STOCKER LE TOKEN
             localStorage.setItem('token', response.token);
-            this.loadUserFromToken();
+            
+            // ✅ UTILISER DIRECTEMENT userId DE LA RÉPONSE (pas besoin d'extraire du token)
+            const user: User = {
+              userId: response.userId,  // ✅ Utiliser userId de la réponse
+              id: response.userId,      // Compatibilité si besoin
+              nom: response.nom,
+              prenom: response.prenom,
+              email: response.email,
+              role: response.role
+            };
+            
+            // ✅ SAUVEGARDER L'UTILISATEUR DIRECTEMENT
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            this.currentUserSubject.next(user);
+            
+            console.log('✅ Utilisateur stocké depuis la réponse:', user);
           }
         })
       );
@@ -104,9 +187,23 @@ export class AuthService {
     return this.http.post<AuthResponse>(`${environment.apiUrl}/users`, userData)
       .pipe(
         tap(response => {
-          if (response.token) {
+          if (response.token && response.userId) {
+            // ✅ STOCKER LE TOKEN
             localStorage.setItem('token', response.token);
-            this.loadUserFromToken();
+            
+            // ✅ UTILISER DIRECTEMENT userId DE LA RÉPONSE
+            const user: User = {
+              userId: response.userId,
+              id: response.userId,
+              nom: response.nom,
+              prenom: response.prenom,
+              email: response.email,
+              role: response.role
+            };
+            
+            // ✅ SAUVEGARDER L'UTILISATEUR DIRECTEMENT
+            localStorage.setItem('currentUser', JSON.stringify(user));
+            this.currentUserSubject.next(user);
           }
         })
       );
@@ -118,6 +215,7 @@ export class AuthService {
 
   logout(): void {
     localStorage.removeItem('token');
+    localStorage.removeItem('currentUser'); // ✅ Supprimer aussi currentUser
     this.currentUserSubject.next(null);
   }
 
@@ -137,15 +235,49 @@ export class AuthService {
   }
 
   private loadUserFromToken(): void {
+    // ✅ MÉTHODE 1: Récupérer depuis localStorage (recommandé après connexion)
+    const storedUser = localStorage.getItem('currentUser');
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser);
+        this.currentUserSubject.next(user);
+        console.log('✅ Utilisateur chargé depuis localStorage:', user);
+        return;
+      } catch (error) {
+        console.error('Erreur parsing currentUser:', error);
+      }
+    }
+    
+    // ✅ MÉTHODE 2: Si pas dans localStorage, extraire depuis le token (fallback)
     const token = this.getToken();
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        this.getUserByEmail(payload.sub).subscribe({
-          next: (user) => this.currentUserSubject.next(user),
-          error: () => this.logout()
-        });
+        
+        // ✅ Le token contient maintenant userId dans ses claims
+        if (payload.userId) {
+          // Récupérer l'utilisateur depuis l'API avec userId
+          this.http.get<User>(`${environment.apiUrl}/users/${payload.userId}`).subscribe({
+            next: (user) => {
+              user.userId = user.userId || user.id; // S'assurer que userId existe
+              localStorage.setItem('currentUser', JSON.stringify(user));
+              this.currentUserSubject.next(user);
+            },
+            error: () => this.logout()
+          });
+        } else {
+          // Fallback: utiliser l'email du token
+          this.getUserByEmail(payload.sub).subscribe({
+            next: (user) => {
+              user.userId = user.userId || user.id;
+              localStorage.setItem('currentUser', JSON.stringify(user));
+              this.currentUserSubject.next(user);
+            },
+            error: () => this.logout()
+          });
+        }
       } catch (error) {
+        console.error('Erreur extraction depuis token:', error);
         this.logout();
       }
     }
@@ -817,6 +949,10 @@ export const routes: Routes = [
 ---
 
 **🎉 Votre frontend Angular est maintenant prêt à consommer l'API Spring Boot !**
+
+
+
+
 
 
 

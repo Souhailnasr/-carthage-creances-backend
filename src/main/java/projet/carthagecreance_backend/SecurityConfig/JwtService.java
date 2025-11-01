@@ -25,6 +25,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.keygen.BytesKeyGenerator;
 import org.springframework.security.crypto.keygen.KeyGenerators;
 import projet.carthagecreance_backend.Entity.Token;
+import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Repository.TokenRepository;
 
 @Service
@@ -33,8 +34,8 @@ public class JwtService implements Serializable {
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	@Value("${application.security.jwt.secret-key}")
-	private String secretKey;
+    @Value("${application.security.jwt.secret-key}")
+    private String secretKey;
 	
 	private static final BytesKeyGenerator DEFAULT_TOKEN_GENERATOR = KeyGenerators.secureRandom(15);
 
@@ -57,6 +58,18 @@ public class JwtService implements Serializable {
 		Map<String, Object> claims = new HashMap<>();
 		claims.put("role", userDetails.getAuthorities());
 		return generateToken(claims, userDetails);
+	}
+
+	/**
+	 * Génère un token JWT pour un Utilisateur (inclut userId dans les claims)
+	 * @param utilisateur L'utilisateur pour lequel générer le token
+	 * @return Le token JWT
+	 */
+	public String generateToken(Utilisateur utilisateur) {
+		Map<String, Object> claims = new HashMap<>();
+		claims.put("role", utilisateur.getAuthorities());
+		claims.put("userId", utilisateur.getId()); // Ajouter userId dans les claims
+		return generateToken(claims, utilisateur);
 	}
 
     public String generateToken(Map<String, Object> claims, UserDetails userDetails) {
@@ -88,10 +101,10 @@ public class JwtService implements Serializable {
 		return Jwts.parserBuilder().setSigningKey(getSignInKey()).build().parseClaimsJws(token).getBody();
 	}
 
-	private Key getSignInKey() {
-		byte[] keyBytes = Decoders.BASE64.decode(secretKey);
-		return Keys.hmacShaKeyFor(keyBytes);
-	}
+    private Key getSignInKey() {
+        // Use the exact same derivation as in UserExtractionService to avoid signature mismatch
+        return Keys.hmacShaKeyFor(secretKey.getBytes());
+    }
 	
     public Token createSecureToken(){
         String tokenValue = new String(Base64.encodeBase64URLSafeString(DEFAULT_TOKEN_GENERATOR.generateKey())); // this is a sample, you can adapt as per your security need

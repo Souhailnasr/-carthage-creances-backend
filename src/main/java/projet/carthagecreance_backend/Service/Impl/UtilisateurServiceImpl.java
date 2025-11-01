@@ -122,6 +122,11 @@ public class UtilisateurServiceImpl implements UtilisateurService {
 
             AuthenticationResponse response = AuthenticationResponse.builder()
                     .token(jwtToken)
+                    .userId(savedUtilisateur.getId())
+                    .email(savedUtilisateur.getEmail())
+                    .nom(savedUtilisateur.getNom())
+                    .prenom(savedUtilisateur.getPrenom())
+                    .role(savedUtilisateur.getRoleUtilisateur().name())
                     .build();
             
             System.out.println("===== FIN createUtilisateur - Token retourné =====");

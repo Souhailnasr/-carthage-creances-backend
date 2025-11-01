@@ -124,6 +124,7 @@ public class DossierServiceImpl implements DossierService {
                     .typeDocumentJustificatif(request.getTypeDocumentJustificatif())
                     .creancier(creancier)
                     .debiteur(debiteur)
+                    .agentCreateur(agentCreateur)
                     .build();
 
             // 5. Sauvegarder le Dossier
@@ -676,22 +677,41 @@ public class DossierServiceImpl implements DossierService {
         logger.info("Paramètres - role: {}, userId: {}, page: {}, size: {}, search: {}", role, userId, page, size, search);
 
         try {
+            // Créer la spécification pour les filtres
+            Specification<Dossier> spec = createDossierSpecification(role, userId, search);
+            
             // Créer la pagination avec tri par date de création (plus récent en premier)
             Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "dateCreation"));
             
-            // Exécuter la requête paginée simple (sans spécification pour l'instant)
+            // Exécuter la requête paginée avec gestion d'erreurs robuste
             Page<Dossier> dossierPage;
             try {
-                logger.info("Tentative de récupération des dossiers avec pagination simple...");
-                dossierPage = dossierRepository.findAll(pageable);
+                logger.info("Tentative de récupération des dossiers avec pagination...");
+                dossierPage = dossierRepository.findAll(spec, pageable);
                 logger.info("Récupération réussie: {} dossiers trouvés", dossierPage.getContent().size());
                 
             } catch (Exception e) {
                 logger.error("Erreur lors de la récupération des dossiers: {}", e.getMessage());
-                logger.error("Détails de l'erreur: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
-                e.printStackTrace();
                 
-                throw new RuntimeException("Erreur lors de la récupération des dossiers: " + e.getMessage(), e);
+                // Gestion spécifique de l'erreur d'enum
+                if (e.getMessage().contains("No enum constant") || e.getMessage().contains("DossierStatus")) {
+                    logger.error("ERREUR CRITIQUE: Valeurs invalides dans dossier_status détectées!");
+                    logger.error("Détails de l'erreur: {}", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+                    
+                    // Retourner une page vide avec message d'erreur explicite
+                    dossierPage = new org.springframework.data.domain.PageImpl<>(
+                        new java.util.ArrayList<>(), 
+                        pageable, 
+                        0
+                    );
+                    
+                    logger.error("SOLUTION REQUISE: Exécutez le script de nettoyage de la base de données");
+                    throw new RuntimeException("Erreur de données dans la base de données. Valeurs invalides détectées dans dossier_status. Veuillez exécuter le script de nettoyage.", e);
+                    
+                } else {
+                    logger.error("Erreur inattendue: {}", e.getMessage());
+                    throw new RuntimeException("Erreur lors de la récupération des dossiers: " + e.getMessage(), e);
+                }
             }
             
             logger.info("Résultat pagination - totalElements: {}, totalPages: {}, currentPage: {}, size: {}", 

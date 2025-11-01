@@ -2,6 +2,7 @@ package projet.carthagecreance_backend.Service.Impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import projet.carthagecreance_backend.Entity.Creancier;
 import projet.carthagecreance_backend.Entity.Debiteur;
 import projet.carthagecreance_backend.Entity.Type;
 import projet.carthagecreance_backend.Repository.DebiteurRepository;
@@ -66,7 +67,8 @@ public class DebiteurServiceImpl implements DebiteurService {
 
     @Override
     public List<Debiteur> getDebiteursByFullName(String name, String firstName) {
-        return debiteurRepository.findByNomAndPrenom(name, firstName);
+        Optional<Debiteur> debiteur = debiteurRepository.findByNomAndPrenom(name, firstName);
+        return debiteur.map(List::of).orElse(List.of());
     }
 
     @Override

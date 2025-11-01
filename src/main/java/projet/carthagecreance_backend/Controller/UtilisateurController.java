@@ -8,6 +8,8 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.PayloadResponse.AuthenticationResponse;
+import projet.carthagecreance_backend.PayloadResponse.UserProfileResponse;
+import projet.carthagecreance_backend.SecurityServices.UserExtractionService;
 import projet.carthagecreance_backend.Service.UtilisateurService;
 
 import java.util.List;
@@ -16,6 +18,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.jsonwebtoken.ExpiredJwtException;
 
 /**
  * Contrôleur REST complet pour la gestion des utilisateurs avec workflow
@@ -31,7 +34,63 @@ public class UtilisateurController {
     @Autowired
     private UtilisateurService utilisateurService;
 
+    @Autowired
+    private UserExtractionService userExtractionService;
+
     // ==================== ENDPOINTS DE BASE (CRUD) ====================
+
+    /**
+     * Retourne le profil de l'utilisateur authentifié en lisant le token JWT.
+     * GET /api/users/me
+     */
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(@RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
+        try {
+            if (authorizationHeader == null || authorizationHeader.isBlank()) {
+                logger.warn("/api/users/me - Token manquant");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Non autorisé",
+                    "message", "Token d'authentification manquant",
+                    "code", "TOKEN_MISSING"
+                ));
+            }
+
+            Utilisateur user = userExtractionService.extractUserFromToken(authorizationHeader);
+            if (user == null) {
+                logger.warn("/api/users/me - Utilisateur non trouvé");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Non autorisé",
+                    "message", "Impossible d'extraire l'utilisateur depuis le token",
+                    "code", "USER_NOT_FOUND"
+                ));
+            }
+
+            UserProfileResponse body = UserProfileResponse.builder()
+                    .userId(user.getId())
+                    .nom(user.getNom())
+                    .prenom(user.getPrenom())
+                    .email(user.getEmail())
+                    .role(user.getRoleUtilisateur() != null ? user.getRoleUtilisateur().name() : null)
+                    .build();
+
+            return ResponseEntity.ok(body);
+        } catch (ExpiredJwtException e) {
+            logger.error("/api/users/me - Token JWT expiré: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                "error", "Token expiré",
+                "message", "Votre session a expiré. Veuillez vous reconnecter.",
+                "code", "TOKEN_EXPIRED",
+                "expiredAt", e.getClaims().getExpiration().toString(),
+                "currentTime", new java.util.Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur dans /api/users/me: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Erreur interne",
+                "message", "Une erreur est survenue lors de la récupération de votre profil"
+            ));
+        }
+    }
 
     /**
      * Crée un nouvel utilisateur avec validation des rôles

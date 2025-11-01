@@ -14,4 +14,9 @@ import java.util.List;
 public class AuthenticationResponse {
 	private String token;
 	private List<String> errors;
+	private Long userId;
+	private String email;
+	private String nom;
+	private String prenom;
+	private String role;
 }

@@ -2,6 +2,8 @@ package projet.carthagecreance_backend.SecurityServices;
 
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,6 +26,7 @@ import projet.carthagecreance_backend.Service.NotificationService;
 @RequiredArgsConstructor
 public class AuthenticationService {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthenticationService.class);
 	
 	
     private final UtilisateurRepository repository;
@@ -50,10 +53,17 @@ public class AuthenticationService {
         saveUserToken(savedUser, jwtToken);
         return AuthenticationResponse.builder()
                 .token(jwtToken)
+                .userId(savedUser.getId())
+                .email(savedUser.getEmail())
+                .nom(savedUser.getNom())
+                .prenom(savedUser.getPrenom())
+                .role(savedUser.getRoleUtilisateur().name())
                 .build();
     }
 
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
+        logger.info("=== DÉBUT AUTHENTICATION ===");
+        logger.info("Email: {}", request.getEmail());
  
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
@@ -62,17 +72,30 @@ public class AuthenticationService {
                 )
         );
         var user = repository.findByEmail(request.getEmail())
-                .orElseThrow();
-        if (user == null) {
-            throw new UsernameNotFoundException(user +"Not Found");
-        }		
+                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé avec l'email: " + request.getEmail()));
+        
+        logger.info("Utilisateur trouvé: ID={}, Nom={}, Email={}, Role={}", 
+                   user.getId(), user.getNom(), user.getEmail(), user.getRoleUtilisateur());
+        
         var jwtToken = jwtService.generateToken(user);
         revokeAllUserTokens(user);
         saveUserToken(user, jwtToken);
-        return AuthenticationResponse.builder()
+        
+        AuthenticationResponse response = AuthenticationResponse.builder()
                 .token(jwtToken)
+                .userId(user.getId())
+                .email(user.getEmail())
+                .nom(user.getNom())
+                .prenom(user.getPrenom())
+                .role(user.getRoleUtilisateur().name())
                 .build();
-
+        
+        logger.info("Response générée: userId={}, email={}, nom={}, prenom={}, role={}", 
+                   response.getUserId(), response.getEmail(), response.getNom(), 
+                   response.getPrenom(), response.getRole());
+        logger.info("=== FIN AUTHENTICATION ===");
+        
+        return response;
     }
 
     private void saveUserToken(Utilisateur user, String jwtToken) {

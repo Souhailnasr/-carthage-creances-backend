@@ -11,13 +11,13 @@ import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.Entity.StatutValidation;
 import projet.carthagecreance_backend.Entity.Statut;
+import io.jsonwebtoken.ExpiredJwtException;
 import projet.carthagecreance_backend.Service.DossierService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import projet.carthagecreance_backend.Service.FileStorageService;
 import projet.carthagecreance_backend.SecurityServices.UserExtractionService;
 import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Entity.RoleUtilisateur;
-import projet.carthagecreance_backend.Entity.DossierStatus;
 
 import java.util.Date;
 import java.util.List;
@@ -126,29 +126,21 @@ public class DossierController {
      * dossier: {"titre": "Dossier test", "agentCreateurId": 1, ...}
      */
     // Nouvelle route: POST /api/dossiers/create (multipart) — compatible Angular
-    @PostMapping(value = "/create", consumes = {"multipart/form-data"})
+    @PostMapping(value = "/create/{id}", consumes = {"multipart/form-data"})
     public ResponseEntity<?> createDossierMultipart(
+            @PathVariable("id") Long userId,
             @RequestPart("dossier") DossierRequest request,
             @RequestPart(value = "contratSigne", required = false) MultipartFile contratSigne,
             @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir,
-            @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef,
-            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+            @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef) {
 
         try {
-            // Extraire l'utilisateur connecté depuis le token
-            Utilisateur utilisateurConnecte = null;
-            if (authHeader != null) {
-                utilisateurConnecte = userExtractionService.extractUserFromToken(authHeader);
-                if (utilisateurConnecte == null) {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Token invalide"));
-                }
-            }
+            request.setAgentCreateurId(userId);
 
-            // Validation des fichiers avant traitement
+            // Validation PDF
             validatePdfFile(contratSigne, "contratSigne");
             validatePdfFile(pouvoir, "pouvoir");
-            
-            // Handle file saving if provided
+
             if (contratSigne != null && !contratSigne.isEmpty()) {
                 request.setContratSigneFile(contratSigne);
             }
@@ -156,66 +148,41 @@ public class DossierController {
                 request.setPouvoirFile(pouvoir);
             }
 
-            // Déterminer le rôle et le statut selon l'utilisateur connecté
-            if (utilisateurConnecte != null) {
-                boolean createurEstChef = isChef(utilisateurConnecte.getRoleUtilisateur());
-                if (createurEstChef) {
-                    request.setStatut(Statut.VALIDE);
-                    request.setAgentCreateurId(utilisateurConnecte.getId());
-                } else {
-                    request.setStatut(Statut.EN_ATTENTE_VALIDATION);
-                    request.setAgentCreateurId(utilisateurConnecte.getId());
-                }
-            } else {
-                // Fallback si pas de token
-                if (!isChef) {
-                    request.setStatut(Statut.EN_ATTENTE_VALIDATION);
-                }
-            }
+            // Statut selon rôle
+            request.setStatut(isChef ? Statut.VALIDE : Statut.EN_ATTENTE_VALIDATION);
 
             Dossier createdDossier = dossierService.createDossier(request);
-            logger.info("Dossier créé avec succès: ID={}, Titre={}", createdDossier.getId(), createdDossier.getTitre());
 
-            // Si isChef=true, valider immédiatement le dossier avec l'agentCreateur comme chef
             if (isChef) {
-                if (request.getAgentCreateurId() == null) {
-                    return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Validation chef",
-                        "message", "agentCreateurId est requis lorsque isChef=true",
-                        "timestamp", new Date().toString()
-                    ));
-                }
                 try {
-                    dossierService.validerDossier(createdDossier.getId(), request.getAgentCreateurId());
+                    dossierService.validerDossier(createdDossier.getId(), userId);
                     createdDossier = dossierService.getDossierById(createdDossier.getId()).orElse(createdDossier);
                 } catch (RuntimeException e) {
-                    logger.error("Erreur lors de la validation automatique par chef: {}", e.getMessage());
                     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
-                        "error", "Validation chef",
-                        "message", e.getMessage(),
-                        "timestamp", new Date().toString()
+                            "error", "Validation chef",
+                            "message", e.getMessage(),
+                            "timestamp", new Date().toString()
                     ));
                 }
             }
 
             return new ResponseEntity<>(createdDossier, HttpStatus.CREATED);
+
         } catch (IllegalArgumentException e) {
-            logger.error("Erreur de validation lors de la création du dossier: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of(
-                "error", "Erreur de validation",
-                "message", e.getMessage(),
-                "timestamp", new Date().toString()
+                    "error", "Erreur de validation",
+                    "message", e.getMessage(),
+                    "timestamp", new Date().toString()
             ));
         } catch (RuntimeException e) {
-            logger.error("Erreur lors de la création du dossier: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of(
-                        "error", "Erreur interne du serveur",
-                        "message", "Erreur lors de la création du dossier: " + e.getMessage(),
-                        "timestamp", new Date().toString()
-                    ));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "error", "Erreur interne du serveur",
+                    "message", "Erreur lors de la création du dossier: " + e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
         }
     }
+
 
     /**
      * Crée un nouveau dossier avec workflow (version simplifiée)
@@ -235,24 +202,70 @@ public class DossierController {
     // Nouvelle route: POST /api/dossiers/create (JSON)
     @PostMapping(path = "/create", consumes = {"application/json"})
     public ResponseEntity<?> createDossierSimple(@RequestBody DossierRequest request,
-                                                 @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef) {
+                                                 @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef,
+                                                 @RequestHeader(name = "Authorization", required = false) String authHeader) {
         try {
-            // Assigner le statut selon le rôle
-            if (!isChef) {
+            // Extraire l'utilisateur connecté depuis le token (obligatoire)
+            if (authHeader == null || authHeader.isBlank()) {
+                logger.warn("/api/dossiers/create (JSON) - Token manquant");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Non autorisé",
+                    "message", "Token d'authentification requis pour créer un dossier",
+                    "code", "TOKEN_MISSING",
+                    "timestamp", new Date().toString()
+                ));
+            }
+
+            Utilisateur utilisateurConnecte;
+            try {
+                utilisateurConnecte = userExtractionService.extractUserFromToken(authHeader);
+                if (utilisateurConnecte == null) {
+                    logger.warn("/api/dossiers/create (JSON) - Utilisateur non trouvé");
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "error", "Token invalide",
+                        "message", "Impossible d'extraire l'utilisateur depuis le token",
+                        "code", "USER_NOT_FOUND",
+                        "timestamp", new Date().toString()
+                    ));
+                }
+            } catch (ExpiredJwtException e) {
+                logger.error("/api/dossiers/create (JSON) - Token JWT expiré: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Token expiré",
+                    "message", "Votre session a expiré. Veuillez vous reconnecter pour créer un dossier.",
+                    "code", "TOKEN_EXPIRED",
+                    "expiredAt", e.getClaims().getExpiration().toString(),
+                    "currentTime", new Date().toString(),
+                    "timestamp", new Date().toString()
+                ));
+            }
+
+            // TOUJOURS définir agentCreateurId à partir de l'utilisateur connecté (écrase toute valeur du DTO)
+            request.setAgentCreateurId(utilisateurConnecte.getId());
+            logger.info("agentCreateurId défini automatiquement à partir de l'utilisateur connecté: ID={}", utilisateurConnecte.getId());
+
+            // Déterminer le statut selon le rôle de l'utilisateur connecté
+            boolean createurEstChef = isChef(utilisateurConnecte.getRoleUtilisateur());
+            if (createurEstChef) {
+                request.setStatut(Statut.VALIDE);
+            } else {
                 request.setStatut(Statut.EN_ATTENTE_VALIDATION);
             }
 
             Dossier createdDossier = dossierService.createDossier(request);
 
-            if (isChef) {
-                if (request.getAgentCreateurId() == null) {
-                    return ResponseEntity.badRequest().body("agentCreateurId est requis lorsque isChef=true");
-                }
+            // Si l'utilisateur est chef, valider immédiatement le dossier
+            if (createurEstChef || isChef) {
                 try {
                     dossierService.validerDossier(createdDossier.getId(), request.getAgentCreateurId());
                     createdDossier = dossierService.getDossierById(createdDossier.getId()).orElse(createdDossier);
                 } catch (RuntimeException e) {
-                    return ResponseEntity.badRequest().body(e.getMessage());
+                    logger.error("Erreur lors de la validation automatique par chef: {}", e.getMessage());
+                    return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Validation chef",
+                        "message", e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
                 }
             }
 
@@ -325,8 +338,6 @@ public class DossierController {
             @RequestHeader(name = "Authorization", required = false) String authHeader) {
         
         logger.info("=== DÉBUT getAllDossiers ===");
-        logger.info("Paramètres reçus - role: {}, userId: {}, page: {}, size: {}, search: {}", 
-                   role, userId, page, size, search);
         
         try {
             // Validation des paramètres
@@ -339,15 +350,7 @@ public class DossierController {
                 return ResponseEntity.badRequest().body(Map.of("error", "La taille de page doit être entre 1 et 100"));
             }
 
-            // Extraire l'ID utilisateur depuis le token si pas fourni
-            if (userId == null && authHeader != null) {
-                userId = userExtractionService.extractUserIdFromToken(authHeader);
-                if (userId == null) {
-                    logger.warn("Impossible d'extraire l'ID utilisateur depuis le token");
-                    return ResponseEntity.badRequest().body(Map.of("error", "Token invalide ou utilisateur non trouvé"));
-                }
-                logger.info("ID utilisateur extrait du token: {}", userId);
-            }
+
 
             // Appel du service avec pagination
             Map<String, Object> result = dossierService.getAllDossiersWithPagination(role, userId, page, size, search);

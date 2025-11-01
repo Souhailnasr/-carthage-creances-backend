@@ -19,8 +19,13 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     // Rechercher par code créance
     Optional<Creancier> findByCodeCreance(String codeCreance);
     
-    // Rechercher par nom exact
-    Optional<Creancier> findByNom(String nom);
+    // Rechercher par nom et prénom pour les personnes physiques
+    @Query("SELECT c FROM Creancier c WHERE c.nom = :nom AND c.prenom = :prenom")
+    List<Creancier> findByNomAndPrenom(@Param("nom") String nom, @Param("prenom") String prenom);
+    
+    // Rechercher par nom pour les personnes morales
+    @Query("SELECT c FROM Creancier c WHERE c.nom = :nom")
+    Optional<Creancier> findByNom(@Param("nom") String nom);
     
     // Rechercher par nom
     List<Creancier> findByNomContainingIgnoreCase(String nom);
@@ -28,8 +33,10 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     // Rechercher par prénom
     List<Creancier> findByPrenomContainingIgnoreCase(String prenom);
     
-    // Rechercher par nom et prénom
-    List<Creancier> findByNomAndPrenom(String nom, String prenom);
+    
+    // Rechercher par nom et prénom (retourne Optional pour éviter NonUniqueResultException)
+    @Query("SELECT c FROM Creancier c WHERE c.nom = :nom AND c.prenom = :prenom")
+    Optional<Creancier> findByNomAndPrenomExact(@Param("nom") String nom, @Param("prenom") String prenom);
     
     // Rechercher par email
     Optional<Creancier> findByEmail(String email);
@@ -70,6 +77,14 @@ public interface CreancierRepository extends JpaRepository<Creancier, Long> {
     
     // Rechercher les créanciers par type
     List<Creancier> findByType(Type type);
+    
+    // Rechercher par nom et type (retourne Optional pour éviter NonUniqueResultException)
+    @Query("SELECT c FROM Creancier c WHERE c.nom = :nom AND c.type = :type")
+    Optional<Creancier> findByNomAndType(@Param("nom") String nom, @Param("type") Type type);
+    
+    // Rechercher par nom et prénom et type (retourne Optional pour éviter NonUniqueResultException)
+    @Query("SELECT c FROM Creancier c WHERE c.nom = :nom AND c.prenom = :prenom AND c.type = :type")
+    Optional<Creancier> findByNomAndPrenomAndType(@Param("nom") String nom, @Param("prenom") String prenom, @Param("type") Type type);
     
     // Rechercher les créanciers par type et ville
     List<Creancier> findByTypeAndVille(Type type, String ville);
