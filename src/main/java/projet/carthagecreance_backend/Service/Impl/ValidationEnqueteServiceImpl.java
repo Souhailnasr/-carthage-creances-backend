@@ -272,17 +272,12 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
         }
         
         // Mettre à jour le statut de l'enquête en utilisant la méthode de validation du service
-        // qui gère les cas où dossier_id est NULL
+        // qui gère les cas où dossier_id est NULL et préserve agent_createur_id
         try {
-            // Utiliser directement la méthode validerEnquette du service qui gère déjà le cas dossier_id NULL
-            // Mais on a besoin du chefId, donc on va utiliser updateEnquette avec une enquête minimale
-            Enquette enquete = Enquette.builder()
-                    .id(enqueteId)
-                    .valide(true)
-                    .dateValidation(LocalDateTime.now())
-                    .statut(Statut.VALIDE)
-                    .build();
-        enquetteService.updateEnquette(enqueteId, enquete);
+            // Utiliser directement la méthode validerEnquette du service qui utilise updateStatutNative()
+            // Cette méthode ne modifie que statut, valide, date_validation et commentaire_validation
+            // Elle préserve agent_createur_id et tous les autres champs
+            enquetteService.validerEnquette(enqueteId, chefId);
         } catch (Exception e) {
             System.err.println("Erreur lors de la mise à jour de l'enquête " + enqueteId + ": " + e.getMessage());
             // Si la mise à jour échoue à cause de dossier_id NULL, on peut quand même continuer
@@ -354,15 +349,12 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
         }
         
         // Mettre à jour le statut de l'enquête en utilisant la méthode de rejet du service
-        // qui gère les cas où dossier_id est NULL
+        // qui gère les cas où dossier_id est NULL et préserve agent_createur_id
         try {
-            Enquette enquete = Enquette.builder()
-                    .id(enqueteId)
-                    .valide(false)
-                    .commentaireValidation(commentaire)
-                    .statut(Statut.REJETE)
-                    .build();
-        enquetteService.updateEnquette(enqueteId, enquete);
+            // Utiliser directement la méthode rejeterEnquette du service qui utilise updateStatutNative()
+            // Cette méthode ne modifie que statut, valide, date_validation et commentaire_validation
+            // Elle préserve agent_createur_id et tous les autres champs
+            enquetteService.rejeterEnquette(enqueteId, commentaire);
         } catch (Exception e) {
             System.err.println("Erreur lors de la mise à jour de l'enquête " + enqueteId + ": " + e.getMessage());
             // Si la mise à jour échoue à cause de dossier_id NULL, on peut quand même continuer
