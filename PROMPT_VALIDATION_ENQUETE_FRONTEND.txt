@@ -1,0 +1,1054 @@
+Créer une intégration complète Angular pour consommer les APIs d'enquêtes et de validation d'enquêtes, avec amélioration des interfaces existantes pour les vues Agent et Chef.
+
+=== ANALYSE DU BACKEND ===
+
+ENDPOINTS DISPONIBLES:
+
+1. ENQUÊTES (EnquetteController):
+   - POST /api/enquettes
+     * Crée une nouvelle enquête
+     * Body: Enquette (avec dossier_id obligatoire)
+     * Retourne: Enquette créée avec ID
+   
+   - GET /api/enquettes/{id}
+     * Récupère une enquête par son ID
+     * Retourne: Enquette complète
+   
+   - GET /api/enquettes
+     * Récupère toutes les enquêtes
+     * Retourne: Enquette[]
+   
+   - PUT /api/enquettes/{id}
+     * Met à jour une enquête existante
+     * Body: Enquette (champs modifiés)
+     * Retourne: Enquette mise à jour
+   
+   - DELETE /api/enquettes/{id}
+     * Supprime une enquête
+     * Retourne: 204 NO_CONTENT
+   
+   - GET /api/enquettes/dossier/{dossierId}
+     * Récupère l'enquête associée à un dossier
+     * Retourne: Enquette | 404 si non trouvée
+   
+   - GET /api/enquettes/creation-date/{date}
+     * Récupère les enquêtes créées à une date spécifique
+     * Format date: YYYY-MM-DD
+   
+   - GET /api/enquettes/creation-date-range?startDate={date}&endDate={date}
+     * Récupère les enquêtes créées dans une plage de dates
+   
+   - GET /api/enquettes/sector/{sector}
+     * Récupère les enquêtes par secteur d'activité
+   
+   - GET /api/enquettes/legal-form/{legalForm}
+     * Récupère les enquêtes par forme juridique
+   
+   - GET /api/enquettes/pdg/{pdg}
+     * Récupère les enquêtes par PDG (nom du PDG)
+   
+   - GET /api/enquettes/capital-range?minCapital={min}&maxCapital={max}
+     * Récupère les enquêtes par plage de capital
+   
+   - GET /api/enquettes/revenue-range?minRevenue={min}&maxRevenue={max}
+     * Récupère les enquêtes par plage de chiffre d'affaires
+   
+   - GET /api/enquettes/staff-range?minStaff={min}&maxStaff={max}
+     * Récupère les enquêtes par plage d'effectif
+   
+   - GET /api/enquettes/with-real-estate
+     * Récupère les enquêtes avec bien immobilier
+   
+   - GET /api/enquettes/with-movable-property
+     * Récupère les enquêtes avec bien mobilier
+   
+   - GET /api/enquettes/with-observations
+     * Récupère les enquêtes avec observations
+
+2. VALIDATION D'ENQUÊTES (ValidationEnqueteController):
+   - POST /api/validation/enquetes
+     * Crée une nouvelle validation d'enquête
+     * Body: ValidationEnquete (avec enquete.id, agentCreateur.id obligatoires)
+     * Retourne: ValidationEnquete créée avec statut EN_ATTENTE
+     * Vérifie qu'il n'y a pas déjà une validation en attente pour cette enquête
+   
+   - PUT /api/validation/enquetes/{id}
+     * Met à jour une validation d'enquête (seulement si statut EN_ATTENTE)
+     * Body: ValidationEnquete (principalement commentaires)
+     * Retourne: ValidationEnquete mise à jour
+   
+   - DELETE /api/validation/enquetes/{id}
+     * Supprime une validation d'enquête
+     * Retourne: 204 NO_CONTENT
+   
+   - GET /api/validation/enquetes/{id}
+     * Récupère une validation par son ID
+     * Retourne: ValidationEnquete complète
+   
+   - GET /api/validation/enquetes
+     * Récupère toutes les validations d'enquêtes
+     * Retourne: ValidationEnquete[]
+   
+   - GET /api/validation/enquetes/en-attente
+     * Récupère les enquêtes en attente de validation
+     * Retourne: ValidationEnquete[] avec statut EN_ATTENTE
+     * Utilisé par les chefs pour voir les enquêtes à valider
+   
+   - GET /api/validation/enquetes/agent/{agentId}
+     * Récupère les validations d'un agent créateur
+     * Retourne: ValidationEnquete[] de l'agent
+     * Utilisé par l'agent pour voir son historique
+   
+   - GET /api/validation/enquetes/chef/{chefId}
+     * Récupère les validations d'un chef validateur
+     * Retourne: ValidationEnquete[] validées/rejetées par le chef
+   
+   - GET /api/validation/enquetes/enquete/{enqueteId}
+     * Récupère toutes les validations d'une enquête spécifique
+     * Retourne: ValidationEnquete[] (historique des validations)
+   
+   - GET /api/validation/enquetes/statut/{statut}
+     * Récupère les validations par statut
+     * Statut: EN_ATTENTE | VALIDE | REJETE
+     * Retourne: ValidationEnquete[] filtrées
+   
+   - POST /api/validation/enquetes/{id}/valider?chefId={chefId}&commentaire={commentaire}
+     * Valide une enquête
+     * Paramètres: id (validationId), chefId (obligatoire), commentaire (optionnel)
+     * Retourne: ValidationEnquete mise à jour avec statut VALIDE
+     * Actions backend:
+       - Vérifie que le chef a les droits (SUPER_ADMIN, CHEF_DEPARTEMENT_*)
+       - Vérifie qu'il n'y a pas déjà une validation en attente
+       - Met à jour la validation: statut=VALIDE, chefValidateur, dateValidation
+       - Envoie une notification à l'agent créateur
+       - Met à jour l'enquête (valide=true, dateValidation, commentaireValidation)
+     * Erreurs possibles:
+       - 400: Chef non trouvé / Pas les droits / Validation déjà traitée / Agent ne peut pas valider ses propres enquêtes
+   
+   - POST /api/validation/enquetes/{id}/rejeter?chefId={chefId}&commentaire={commentaire}
+     * Rejette une enquête
+     * Paramètres: id (validationId), chefId (obligatoire), commentaire (optionnel)
+     * Retourne: ValidationEnquete mise à jour avec statut REJETE
+     * Actions backend:
+       - Vérifie que le chef a les droits
+       - Met à jour la validation: statut=REJETE, chefValidateur, dateValidation
+       - Envoie une notification à l'agent créateur
+       - Met à jour l'enquête (valide=false, commentaireValidation)
+     * Erreurs possibles:
+       - 400: Chef non trouvé / Pas les droits / Validation déjà traitée / Agent ne peut pas rejeter ses propres enquêtes
+   
+   - POST /api/validation/enquetes/{id}/en-attente?commentaire={commentaire}
+     * Remet une validation en attente
+     * Paramètres: id (validationId), commentaire (optionnel)
+     * Retourne: ValidationEnquete mise à jour avec statut EN_ATTENTE
+     * Utilisé pour annuler une validation/rejet et remettre en attente
+   
+   - GET /api/validation/enquetes/statistiques/statut/{statut}
+     * Compte les validations par statut
+     * Retourne: number (nombre de validations)
+   
+   - GET /api/validation/enquetes/statistiques/agent/{agentId}
+     * Compte les validations d'un agent
+     * Retourne: number
+   
+   - GET /api/validation/enquetes/statistiques/chef/{chefId}
+     * Compte les validations d'un chef
+     * Retourne: number
+
+WORKFLOW MÉTIER:
+
+1. CRÉATION D'UNE ENQUÊTE:
+   - Agent crée une enquête via POST /api/enquettes
+   - L'enquête est liée à un dossier (dossier_id obligatoire)
+   - L'enquête est créée avec valide=false par défaut
+   - Agent peut ensuite demander une validation via POST /api/validation/enquetes
+   - Une ValidationEnquete est créée avec statut EN_ATTENTE
+   - Le chef reçoit une notification (géré par le backend)
+
+2. VALIDATION D'UNE ENQUÊTE:
+   - Chef voit les enquêtes en attente via GET /api/validation/enquetes/en-attente
+   - Chef valide via POST /api/validation/enquetes/{id}/valider?chefId={chefId}&commentaire={commentaire}
+   - Backend met à jour:
+     - ValidationEnquete: statut=VALIDE, chefValidateur, dateValidation, commentaires
+     - Enquette: valide=true, dateValidation, commentaireValidation
+   - Agent créateur reçoit une notification automatique
+
+3. REJET D'UNE ENQUÊTE:
+   - Chef rejette via POST /api/validation/enquetes/{id}/rejeter?chefId={chefId}&commentaire={commentaire}
+   - Backend met à jour:
+     - ValidationEnquete: statut=REJETE, chefValidateur, dateValidation, commentaires
+     - Enquette: valide=false, commentaireValidation
+   - Agent créateur reçoit une notification automatique
+
+4. RÈGLES DE VALIDATION:
+   - Un agent ne peut pas valider/rejeter ses propres enquêtes
+   - Seuls les chefs (SUPER_ADMIN, CHEF_DEPARTEMENT_*) peuvent valider/rejeter
+   - Il ne peut y avoir qu'une seule validation EN_ATTENTE par enquête
+   - Seules les validations EN_ATTENTE peuvent être modifiées
+
+=== STRUCTURES DE DONNÉES ===
+
+1. Interface Enquette:
+export interface Enquette {
+  id: number;
+  rapportCode?: string; // Exemple: CC6008
+  
+  // Éléments financiers
+  nomElementFinancier?: string;
+  pourcentage?: number;
+  banqueAgence?: string;
+  banques?: string;
+  exercices?: string;
+  chiffreAffaire?: number;
+  resultatNet?: number;
+  disponibiliteBilan?: string;
+  
+  // Solvabilité
+  appreciationBancaire?: string;
+  paiementsCouverture?: string;
+  reputationCommerciale?: string;
+  incidents?: string;
+  
+  // Patrimoine débiteur
+  bienImmobilier?: string;
+  situationJuridiqueImmobilier?: string;
+  bienMobilier?: string;
+  situationJuridiqueMobilier?: string;
+  
+  // Autres affaires & observations
+  autresAffaires?: string;
+  observations?: string;
+  
+  // Décision comité recouvrement
+  decisionComite?: string;
+  visaDirecteurJuridique?: string;
+  visaEnqueteur?: string;
+  visaDirecteurCommercial?: string;
+  registreCommerce?: string;
+  codeDouane?: string;
+  matriculeFiscale?: string;
+  formeJuridique?: string;
+  dateCreation?: string; // LocalDate format: YYYY-MM-DD
+  capital?: number;
+  
+  // Dirigeants
+  pdg?: string;
+  directeurAdjoint?: string;
+  directeurFinancier?: string;
+  directeurCommercial?: string;
+  
+  // Activité
+  descriptionActivite?: string;
+  secteurActivite?: string;
+  effectif?: number;
+  
+  // Informations diverses
+  email?: string;
+  marques?: string;
+  groupe?: string;
+  
+  // Relations
+  dossier?: Dossier; // Objet Dossier complet (pas juste id)
+  dossierId?: number; // ID du dossier pour création/modification
+  agentCreateur?: Utilisateur; // Objet Utilisateur complet
+  agentCreateurId?: number; // ID de l'agent pour création/modification
+  agentResponsable?: Utilisateur; // Objet Utilisateur complet
+  agentResponsableId?: number; // ID de l'agent responsable pour création/modification
+  
+  // Propriétés de validation
+  valide?: boolean; // true si validée, false sinon
+  dateValidation?: string; // ISO 8601 format (LocalDateTime)
+  commentaireValidation?: string; // Commentaire de validation/rejet
+}
+
+2. Interface ValidationEnquete:
+export interface ValidationEnquete {
+  id: number;
+  enquete: Enquette; // Objet Enquette complet (pas juste id)
+  enqueteId?: number; // ID de l'enquête pour création
+  agentCreateur: Utilisateur; // Objet Utilisateur complet
+  agentCreateurId?: number; // ID de l'agent pour création
+  chefValidateur: Utilisateur | null; // null si pas encore validé/rejeté
+  chefValidateurId?: number; // ID du chef pour validation/rejet
+  dateValidation: string | null; // ISO 8601 format, null si EN_ATTENTE
+  statut: 'EN_ATTENTE' | 'VALIDE' | 'REJETE'; // Statut de validation
+  commentaires: string | null; // Commentaires de validation/rejet
+  dateCreation: string; // ISO 8601 format
+  dateModification?: string | null; // ISO 8601 format
+}
+
+3. Interface Utilisateur (si pas déjà existante):
+export interface Utilisateur {
+  id: number;
+  nom: string;
+  prenom: string;
+  email: string;
+  roleUtilisateur: 'AGENT_DOSSIER' | 'CHEF_DEPARTEMENT_DOSSIER' | 'CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE' | 'CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE' | 'CHEF_DEPARTEMENT_FINANCE' | 'SUPER_ADMIN' | string;
+}
+
+4. Interface Dossier (si pas déjà existante):
+export interface Dossier {
+  id: number;
+  titre: string;
+  numeroDossier: string;
+  statut?: string;
+  dossierStatus?: string;
+  // ... autres champs du dossier
+}
+
+5. Enum StatutValidation:
+export enum StatutValidation {
+  EN_ATTENTE = 'EN_ATTENTE',
+  VALIDE = 'VALIDE',
+  REJETE = 'REJETE'
+}
+
+=== SERVICE ENQUÊTES ===
+
+Créer/mettre à jour: services/enquete.service.ts
+
+MÉTHODES À IMPLÉMENTER:
+
+1. createEnquete(enquete: Partial<Enquette>): Observable<Enquette>
+   - POST /api/enquettes
+   - Headers: Authorization: Bearer {token}
+   - Body: Enquette (au minimum: dossierId obligatoire)
+   - Retourne: Enquette créée avec ID
+   - Gérer les erreurs: 400 (données invalides), 401, 500
+
+2. getEnqueteById(id: number): Observable<Enquette>
+   - GET /api/enquettes/{id}
+   - Retourne: Enquette complète avec relations chargées
+
+3. getAllEnquetes(): Observable<Enquette[]>
+   - GET /api/enquettes
+   - Retourne: Liste de toutes les enquêtes
+
+4. updateEnquete(id: number, enquete: Partial<Enquette>): Observable<Enquette>
+   - PUT /api/enquettes/{id}
+   - Body: Enquette (champs modifiés)
+   - Retourne: Enquette mise à jour
+
+5. deleteEnquete(id: number): Observable<void>
+   - DELETE /api/enquettes/{id}
+   - Retourne: 204 NO_CONTENT
+
+6. getEnqueteByDossier(dossierId: number): Observable<Enquette | null>
+   - GET /api/enquettes/dossier/{dossierId}
+   - Retourne: Enquette | null si non trouvée
+   - Utilisé pour vérifier si un dossier a déjà une enquête
+
+7. getEnquetesByCreationDate(date: string): Observable<Enquette[]>
+   - GET /api/enquettes/creation-date/{date}
+   - Format date: YYYY-MM-DD
+
+8. getEnquetesByCreationDateRange(startDate: string, endDate: string): Observable<Enquette[]>
+   - GET /api/enquettes/creation-date-range?startDate={start}&endDate={end}
+   - Format dates: YYYY-MM-DD
+
+9. getEnquetesBySector(sector: string): Observable<Enquette[]>
+   - GET /api/enquettes/sector/{sector}
+
+10. getEnquetesByLegalForm(legalForm: string): Observable<Enquette[]>
+    - GET /api/enquettes/legal-form/{legalForm}
+
+11. getEnquetesByPDG(pdg: string): Observable<Enquette[]>
+    - GET /api/enquettes/pdg/{pdg}
+
+12. getEnquetesByCapitalRange(minCapital: number, maxCapital: number): Observable<Enquette[]>
+    - GET /api/enquettes/capital-range?minCapital={min}&maxCapital={max}
+
+13. getEnquetesByRevenueRange(minRevenue: number, maxRevenue: number): Observable<Enquette[]>
+    - GET /api/enquettes/revenue-range?minRevenue={min}&maxRevenue={max}
+
+14. getEnquetesByStaffRange(minStaff: number, maxStaff: number): Observable<Enquette[]>
+    - GET /api/enquettes/staff-range?minStaff={min}&maxStaff={max}
+
+15. getEnquetesWithRealEstate(): Observable<Enquette[]>
+    - GET /api/enquettes/with-real-estate
+
+16. getEnquetesWithMovableProperty(): Observable<Enquette[]>
+    - GET /api/enquettes/with-movable-property
+
+17. getEnquetesWithObservations(): Observable<Enquette[]>
+    - GET /api/enquettes/with-observations
+
+GESTION DES ERREURS:
+- Utiliser catchError de RxJS
+- Intercepter les erreurs HTTP et retourner des messages lisibles
+- Logger les erreurs pour le debugging
+- Retourner des Observables avec of([]) ou throwError() selon le cas
+
+=== SERVICE VALIDATION ENQUÊTES ===
+
+Créer/mettre à jour: services/validation-enquete.service.ts
+
+MÉTHODES À IMPLÉMENTER:
+
+1. createValidationEnquete(validation: Partial<ValidationEnquete>): Observable<ValidationEnquete>
+   - POST /api/validation/enquetes
+   - Body: ValidationEnquete (au minimum: enqueteId, agentCreateurId obligatoires)
+   - Retourne: ValidationEnquete créée avec statut EN_ATTENTE
+   - Gérer les erreurs: 400 (validation déjà en attente, données invalides), 401, 500
+
+2. updateValidationEnquete(id: number, validation: Partial<ValidationEnquete>): Observable<ValidationEnquete>
+   - PUT /api/validation/enquetes/{id}
+   - Body: ValidationEnquete (principalement commentaires)
+   - Seulement si statut EN_ATTENTE
+   - Retourne: ValidationEnquete mise à jour
+
+3. deleteValidationEnquete(id: number): Observable<void>
+   - DELETE /api/validation/enquetes/{id}
+   - Retourne: 204 NO_CONTENT
+
+4. getValidationEnqueteById(id: number): Observable<ValidationEnquete>
+   - GET /api/validation/enquetes/{id}
+   - Retourne: ValidationEnquete complète
+
+5. getAllValidationsEnquete(): Observable<ValidationEnquete[]>
+   - GET /api/validation/enquetes
+   - Retourne: Liste de toutes les validations
+
+6. getEnquetesEnAttente(): Observable<ValidationEnquete[]>
+   - GET /api/validation/enquetes/en-attente
+   - Retourne: ValidationEnquete[] avec statut EN_ATTENTE
+   - Utilisé par les chefs pour voir les enquêtes à valider
+
+7. getValidationsByAgent(agentId: number): Observable<ValidationEnquete[]>
+   - GET /api/validation/enquetes/agent/{agentId}
+   - Retourne: ValidationEnquete[] de l'agent
+   - Utilisé par l'agent pour voir son historique
+
+8. getValidationsByChef(chefId: number): Observable<ValidationEnquete[]>
+   - GET /api/validation/enquetes/chef/{chefId}
+   - Retourne: ValidationEnquete[] validées/rejetées par le chef
+
+9. getValidationsByEnquete(enqueteId: number): Observable<ValidationEnquete[]>
+   - GET /api/validation/enquetes/enquete/{enqueteId}
+   - Retourne: Historique des validations d'une enquête
+
+10. getValidationsByStatut(statut: StatutValidation): Observable<ValidationEnquete[]>
+    - GET /api/validation/enquetes/statut/{statut}
+    - Statut: 'EN_ATTENTE' | 'VALIDE' | 'REJETE'
+    - Retourne: ValidationEnquete[] filtrées
+
+11. validerEnquete(validationId: number, chefId: number, commentaire?: string): Observable<ValidationEnquete>
+    - POST /api/validation/enquetes/{validationId}/valider?chefId={chefId}&commentaire={commentaire}
+    - Paramètres: validationId (obligatoire), chefId (obligatoire), commentaire (optionnel)
+    - Retourne: ValidationEnquete mise à jour avec statut VALIDE
+    - Le backend met automatiquement à jour l'enquête et envoie notification
+    - Gérer les erreurs:
+      - 400: Chef non trouvé / Pas les droits / Validation déjà traitée / Agent ne peut pas valider ses propres enquêtes
+      - 401: Non authentifié
+      - 403: Non autorisé
+      - 500: Erreur serveur
+
+12. rejeterEnquete(validationId: number, chefId: number, commentaire?: string): Observable<ValidationEnquete>
+    - POST /api/validation/enquetes/{validationId}/rejeter?chefId={chefId}&commentaire={commentaire}
+    - Paramètres: validationId (obligatoire), chefId (obligatoire), commentaire (optionnel)
+    - Retourne: ValidationEnquete mise à jour avec statut REJETE
+    - Le backend met automatiquement à jour l'enquête et envoie notification
+    - Gérer les erreurs: mêmes que validerEnquete
+
+13. remettreEnAttente(validationId: number, commentaire?: string): Observable<ValidationEnquete>
+    - POST /api/validation/enquetes/{validationId}/en-attente?commentaire={commentaire}
+    - Remet une validation en attente (annule validation/rejet)
+    - Retourne: ValidationEnquete mise à jour avec statut EN_ATTENTE
+
+14. countValidationsByStatut(statut: StatutValidation): Observable<number>
+    - GET /api/validation/enquetes/statistiques/statut/{statut}
+    - Retourne: Nombre de validations avec ce statut
+
+15. countValidationsByAgent(agentId: number): Observable<number>
+    - GET /api/validation/enquetes/statistiques/agent/{agentId}
+    - Retourne: Nombre de validations de l'agent
+
+16. countValidationsByChef(chefId: number): Observable<number>
+    - GET /api/validation/enquetes/statistiques/chef/{chefId}
+    - Retourne: Nombre de validations du chef
+
+GESTION DES ERREURS:
+- Utiliser catchError de RxJS
+- Intercepter les erreurs HTTP et retourner des messages lisibles
+- Logger les erreurs pour le debugging
+- Retourner des Observables avec of([]) ou throwError() selon le cas
+
+UTILISER:
+- HttpClient injecté
+- Base URL depuis environment (http://localhost:8080/api)
+- Interceptor pour ajouter automatiquement le token JWT
+- RxJS operators: catchError, map, tap, finalize
+
+=== COMPOSANT CHEF: LISTE DES ENQUÊTES EN ATTENTE ===
+
+Créer: components/enquetes-en-attente/enquetes-en-attente.component.ts
+
+FONCTIONNALITÉS:
+
+1. AFFICHAGE:
+   - Tableau Angular Material avec colonnes:
+     * Code rapport (rapportCode)
+     * Dossier (numéro dossier + titre)
+     * Agent créateur (nom + prénom)
+     * Date création enquête
+     * Date création validation
+     * Statut (badge EN_ATTENTE orange)
+     * Actions (Valider, Rejeter, Voir détails)
+   - Loading spinner pendant le chargement
+   - Message "Aucune enquête en attente" si liste vide
+   - Pagination si nécessaire (MatPaginator)
+
+2. ACTIONS:
+   - Bouton "Valider" (vert, MatButton) qui ouvre un MatDialog de confirmation
+   - Bouton "Rejeter" (rouge, MatButton) qui ouvre un MatDialog avec formulaire
+   - Bouton "Voir détails" pour afficher les détails complets de l'enquête
+   - Bouton "Voir historique" pour voir toutes les validations de cette enquête
+
+3. DIALOG DE VALIDATION:
+   - Titre: "Valider l'enquête"
+   - Afficher: Code rapport, Numéro dossier, Titre du dossier
+   - Champ optionnel pour commentaire de validation (textarea)
+   - Boutons: "Valider" (primaire) et "Annuler"
+   - Au clic sur "Valider": appeler validerEnquete() du service
+   - Afficher MatSnackBar "Enquête validée avec succès" en cas de succès
+   - Rafraîchir la liste après validation
+
+4. DIALOG DE REJET:
+   - Titre: "Rejeter l'enquête"
+   - Afficher: Code rapport, Numéro dossier, Titre du dossier
+   - Champ optionnel pour commentaire de rejet (textarea)
+   - Avertissement: "Cette action rejettera l'enquête et notifiera l'agent créateur"
+   - Boutons: "Rejeter" (warn) et "Annuler"
+   - Au clic sur "Rejeter": appeler rejeterEnquete() du service avec commentaire
+   - Afficher MatSnackBar "Enquête rejetée" en cas de succès
+   - Rafraîchir la liste après rejet
+
+5. DIALOG DE DÉTAILS:
+   - Afficher toutes les informations de l'enquête (Enquette complète)
+   - Sections organisées:
+     * Informations générales (rapportCode, dateCreation, etc.)
+     * Éléments financiers
+     * Solvabilité
+     * Patrimoine débiteur
+     * Décision comité recouvrement
+     * Dirigeants
+     * Activité
+     * Informations diverses
+   - Afficher aussi les informations du dossier associé
+   - Bouton "Fermer"
+
+6. GESTION D'ÉTAT:
+   - Loading pendant le chargement initial
+   - Loading pendant validation/rejet (désactiver boutons)
+   - Gestion des erreurs avec MatSnackBar (messages d'erreur)
+   - Rafraîchissement automatique après chaque action
+   - Auto-refresh périodique (optionnel: toutes les 30 secondes)
+
+UTILISER:
+- Angular Material: MatTable, MatButton, MatDialog, MatSnackBar, MatChip, MatProgressSpinner, MatPaginator
+- Reactive Forms pour les formulaires
+- Service de validation enquête injecté
+- Service d'authentification pour obtenir l'ID du chef connecté
+- ChangeDetectionStrategy.OnPush si possible
+
+=== COMPOSANT AGENT: CRÉATION D'ENQUÊTE ===
+
+Créer: components/create-enquete/create-enquete.component.ts
+
+FONCTIONNALITÉS:
+
+1. FORMULAIRE DE CRÉATION:
+   - Formulaire Angular Reactive Forms avec tous les champs de l'enquête
+   - Sections organisées avec MatStepper ou MatTabs:
+     * Informations générales (rapportCode, dossierId - sélection dossier)
+     * Éléments financiers
+     * Solvabilité
+     * Patrimoine débiteur
+     * Décision comité recouvrement
+     * Dirigeants
+     * Activité
+     * Informations diverses
+   - Validation: dossierId obligatoire
+   - Bouton "Créer l'enquête" qui appelle createEnquete()
+   - Bouton "Créer et demander validation" qui:
+     - Crée l'enquête
+     - Crée automatiquement une ValidationEnquete avec statut EN_ATTENTE
+     - Affiche un message de succès
+
+2. SÉLECTION DE DOSSIER:
+   - MatAutocomplete ou MatSelect pour sélectionner un dossier
+   - Filtrer les dossiers disponibles (pas déjà liés à une enquête)
+   - Afficher: numéro dossier + titre
+   - Vérifier si le dossier a déjà une enquête (via getEnqueteByDossier())
+
+3. GESTION D'ÉTAT:
+   - Loading pendant la création
+   - Désactiver le formulaire pendant la soumission
+   - Gestion des erreurs avec MatSnackBar
+   - Redirection après création réussie (optionnel)
+
+UTILISER:
+- Angular Material: MatStepper, MatFormField, MatInput, MatSelect, MatAutocomplete, MatButton, MatSnackBar
+- Reactive Forms avec Validators
+- Service enquête injecté
+- Service validation enquête injecté
+- Service dossiers pour la sélection de dossier
+
+=== COMPOSANT AGENT: MODIFICATION D'ENQUÊTE ===
+
+Créer: components/edit-enquete/edit-enquete.component.ts
+
+FONCTIONNALITÉS:
+
+1. FORMULAIRE DE MODIFICATION:
+   - Charger l'enquête existante via getEnqueteById()
+   - Formulaire pré-rempli avec les données actuelles
+   - Même structure que le formulaire de création
+   - Bouton "Enregistrer les modifications" qui appelle updateEnquete()
+   - Bouton "Annuler" qui retourne à la liste
+
+2. RESTRICTIONS:
+   - Seulement si l'enquête n'est pas validée (valide=false)
+   - Ou si l'agent est le créateur de l'enquête
+   - Afficher un message si l'enquête est déjà validée
+
+3. GESTION D'ÉTAT:
+   - Loading pendant le chargement
+   - Loading pendant la modification
+   - Gestion des erreurs avec MatSnackBar
+
+UTILISER:
+- Angular Material: MatStepper, MatFormField, MatInput, MatSelect, MatButton, MatSnackBar
+- Reactive Forms
+- Service enquête injecté
+- Route: /enquetes/edit/:id
+
+=== COMPOSANT AGENT: HISTORIQUE DES VALIDATIONS ===
+
+Créer: components/mes-validations-enquete/mes-validations-enquete.component.ts
+
+FONCTIONNALITÉS:
+
+1. AFFICHAGE:
+   - Tableau Angular Material avec colonnes:
+     * Code rapport
+     * Dossier (numéro + titre)
+     * Statut validation (badge coloré)
+     * Date création validation
+     * Date validation (si validée/rejetée)
+     * Chef validateur (si validée/rejetée)
+     * Commentaires
+     * Actions (Voir détails, Demander validation si rejetée)
+   - Badges colorés MatChip:
+     * EN_ATTENTE: orange
+     * VALIDE: vert
+     * REJETE: rouge
+   - Loading spinner pendant le chargement
+
+2. FILTRES:
+   - MatSelect pour filtrer par statut (Tous, EN_ATTENTE, VALIDE, REJETE)
+   - MatInput pour recherche par code rapport ou numéro dossier
+   - Application des filtres en temps réel avec debounceTime(300)
+
+3. DÉTAILS:
+   - Clic sur "Voir détails" pour voir les détails complets
+   - Afficher dans un MatDialog ou MatExpansionPanel:
+     * Informations complètes de l'enquête
+     * Informations du dossier
+     * Commentaire de validation/rejet si disponible
+     * Nom complet du chef validateur si validée/rejetée
+     * Date exacte de validation
+
+4. ACTIONS:
+   - Si enquête rejetée, possibilité de créer une nouvelle validation
+   - Bouton "Demander nouvelle validation" qui crée une nouvelle ValidationEnquete
+
+5. STATISTIQUES:
+   - Cards MatCard affichant:
+     * Total enquêtes créées
+     * En attente de validation
+     * Validées
+     * Rejetées
+
+6. GESTION D'ÉTAT:
+   - Loading pendant le chargement
+   - Message "Aucune validation trouvée" si liste vide
+   - Pagination si nécessaire (MatPaginator)
+
+UTILISER:
+- Angular Material: MatTable, MatSelect, MatInput, MatChip, MatCard, MatPaginator, MatButton, MatDialog
+- Service de validation enquête injecté
+- Service d'authentification pour obtenir l'ID de l'agent connecté
+- RxJS pour les filtres (combineLatest, debounceTime, distinctUntilChanged)
+
+=== COMPOSANT: DÉTAILS ENQUÊTE ===
+
+Créer: components/enquete-details/enquete-details.component.ts
+
+FONCTIONNALITÉS:
+
+1. AFFICHAGE COMPLET:
+   - Afficher toutes les informations de l'enquête
+   - Sections organisées avec MatExpansionPanel ou MatTabs:
+     * Informations générales
+     * Éléments financiers
+     * Solvabilité
+     * Patrimoine débiteur
+     * Décision comité recouvrement
+     * Dirigeants
+     * Activité
+     * Informations diverses
+     * Historique des validations
+   - Afficher aussi les informations du dossier associé
+   - Afficher le statut de validation avec badge coloré
+
+2. ACTIONS SELON LE RÔLE:
+   - Agent créateur:
+     * Bouton "Modifier" si non validée
+     * Bouton "Demander validation" si pas de validation en attente
+   - Chef:
+     * Bouton "Valider" si validation en attente
+     * Bouton "Rejeter" si validation en attente
+   - Tous:
+     * Bouton "Voir historique" pour voir toutes les validations
+
+3. HISTORIQUE DES VALIDATIONS:
+   - Afficher la liste des validations (getValidationsByEnquete())
+   - Pour chaque validation: statut, date, chef validateur, commentaires
+
+UTILISER:
+- Angular Material: MatExpansionPanel, MatTabs, MatCard, MatButton, MatChip, MatTable
+- Service enquête injecté
+- Service validation enquête injecté
+- Route: /enquetes/:id
+
+=== GESTION DES ERREURS ===
+
+Créer un service helper ou utiliser MatSnackBar directement:
+
+1. Messages de succès:
+   - "Enquête créée avec succès" (vert)
+   - "Enquête validée avec succès" (vert)
+   - "Enquête rejetée" (orange/warn)
+   - "Enquête modifiée avec succès" (vert)
+   - "Validation demandée avec succès" (vert)
+
+2. Messages d'erreur:
+   - "Erreur lors du chargement des enquêtes"
+   - "Erreur lors de la création de l'enquête"
+   - "Erreur lors de la validation de l'enquête"
+   - "Erreur lors du rejet de l'enquête"
+   - "Vous n'avez pas les droits pour valider cette enquête" (403)
+   - "Vous ne pouvez pas valider vos propres enquêtes" (400)
+   - "Une validation est déjà en attente pour cette enquête" (400)
+   - "Session expirée, veuillez vous reconnecter" (401)
+   - Messages spécifiques du backend si disponibles
+
+=== SÉCURITÉ ===
+
+1. Vérifier le rôle de l'utilisateur avant d'afficher les composants:
+   - Chef: peut voir /enquetes/en-attente et valider/rejeter
+   - Agent: peut créer/modifier ses propres enquêtes et voir son historique
+
+2. Utiliser un Guard pour protéger les routes:
+   - Route /enquetes/en-attente: accessible seulement aux CHEF_DEPARTEMENT_* et SUPER_ADMIN
+   - Route /enquetes/create: accessible à tous les utilisateurs authentifiés
+   - Route /enquetes/edit/:id: accessible seulement au créateur de l'enquête
+   - Route /enquetes/mes-validations: accessible à tous les utilisateurs authentifiés
+
+3. Interceptor pour l'authentification:
+   - Ajouter automatiquement Authorization: Bearer {token} à toutes les requêtes
+   - Gérer les erreurs 401 et rediriger vers login si nécessaire
+
+=== CONFIGURATION ===
+
+1. Environment:
+export const environment = {
+  apiUrl: 'http://localhost:8080/api'
+};
+
+2. Module imports:
+- HttpClientModule
+- ReactiveFormsModule
+- MatTableModule, MatButtonModule, MatDialogModule, MatSnackBarModule, MatChipModule, MatProgressSpinnerModule, MatSelectModule, MatInputModule, MatPaginatorModule, MatStepperModule, MatTabsModule, MatExpansionPanelModule, MatCardModule, MatAutocompleteModule
+
+3. Interceptor (si pas déjà créé):
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    const token = localStorage.getItem('token');
+    if (token) {
+      req = req.clone({
+        setHeaders: { Authorization: `Bearer ${token}` }
+      });
+    }
+    return next.handle(req).pipe(
+      catchError(error => {
+        if (error.status === 401) {
+          // Rediriger vers login
+        }
+        return throwError(error);
+      })
+    );
+  }
+}
+
+=== ROUTES ===
+
+Configurer les routes dans app-routing.module.ts:
+
+- /enquetes
+  - Liste de toutes les enquêtes (si chef)
+  
+- /enquetes/en-attente
+  - Liste des enquêtes en attente (chef seulement)
+  
+- /enquetes/create
+  - Formulaire de création d'enquête (agent)
+  
+- /enquetes/edit/:id
+  - Formulaire de modification d'enquête (créateur seulement)
+  
+- /enquetes/:id
+  - Détails d'une enquête
+  
+- /enquetes/mes-validations
+  - Historique des validations de l'agent connecté
+
+IMPORTANT:
+- Tous les appels API doivent inclure le token JWT dans le header Authorization
+- Gérer les cas où le token est expiré (401) et rediriger vers login
+- Valider les formulaires avant de soumettre (dossierId obligatoire pour création)
+- Rafraîchir les données après chaque action (validation/rejet)
+- Afficher des messages de feedback clairs à l'utilisateur
+- Désactiver les boutons pendant les appels API pour éviter les doubles soumissions
+- Vérifier qu'il n'y a pas déjà une validation en attente avant d'en créer une nouvelle
+- Ne permettre la modification que si l'enquête n'est pas validée (valide=false)
+- Gérer les cas où une enquête est déjà liée à un dossier (éviter les doublons)
+
+=== EXEMPLE D'UTILISATION ===
+
+Dans le composant chef (enquetes-en-attente.component.ts):
+```typescript
+export class EnquetesEnAttenteComponent implements OnInit {
+  displayedColumns = ['rapportCode', 'dossier', 'agentCreateur', 'dateCreation', 'statut', 'actions'];
+  dataSource = new MatTableDataSource<ValidationEnquete>();
+  loading = false;
+  
+  constructor(
+    private validationEnqueteService: ValidationEnqueteService,
+    private authService: AuthService,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
+  ) {}
+  
+  ngOnInit() {
+    this.loadEnquetesEnAttente();
+  }
+  
+  loadEnquetesEnAttente() {
+    this.loading = true;
+    this.validationEnqueteService.getEnquetesEnAttente()
+      .pipe(
+        finalize(() => this.loading = false),
+        catchError(error => {
+          this.snackBar.open('Erreur lors du chargement', 'Fermer', { duration: 3000 });
+          return of([]);
+        })
+      )
+      .subscribe(validations => {
+        this.dataSource.data = validations;
+      });
+  }
+  
+  validerEnquete(validation: ValidationEnquete) {
+    const dialogRef = this.dialog.open(ValidationEnqueteDialogComponent, {
+      width: '500px',
+      data: { validation: validation }
+    });
+    
+    dialogRef.afterClosed().subscribe(result => {
+      if (result?.confirmed) {
+        const chefId = this.authService.getCurrentUser().id;
+        this.validationEnqueteService.validerEnquete(validation.id, chefId, result.commentaire)
+          .subscribe({
+            next: () => {
+              this.snackBar.open('Enquête validée avec succès', 'Fermer', { duration: 3000 });
+              this.loadEnquetesEnAttente();
+            },
+            error: (error) => {
+              const message = error.error?.message || 'Erreur lors de la validation';
+              this.snackBar.open(message, 'Fermer', { duration: 5000 });
+            }
+          });
+      }
+    });
+  }
+  
+  rejeterEnquete(validation: ValidationEnquete) {
+    const dialogRef = this.dialog.open(RejetEnqueteDialogComponent, {
+      width: '500px',
+      data: { validation: validation }
+    });
+    
+    dialogRef.afterClosed().subscribe(result => {
+      if (result?.commentaire) {
+        const chefId = this.authService.getCurrentUser().id;
+        this.validationEnqueteService.rejeterEnquete(validation.id, chefId, result.commentaire)
+          .subscribe({
+            next: () => {
+              this.snackBar.open('Enquête rejetée', 'Fermer', { duration: 3000 });
+              this.loadEnquetesEnAttente();
+            },
+            error: (error) => {
+              const message = error.error?.message || 'Erreur lors du rejet';
+              this.snackBar.open(message, 'Fermer', { duration: 5000 });
+            }
+          });
+      }
+    });
+  }
+}
+```
+
+Dans le composant agent (create-enquete.component.ts):
+```typescript
+export class CreateEnqueteComponent implements OnInit {
+  enqueteForm: FormGroup;
+  dossiers: Dossier[] = [];
+  loading = false;
+  
+  constructor(
+    private fb: FormBuilder,
+    private enqueteService: EnqueteService,
+    private validationEnqueteService: ValidationEnqueteService,
+    private dossierService: DossierService,
+    private authService: AuthService,
+    private snackBar: MatSnackBar,
+    private router: Router
+  ) {
+    this.enqueteForm = this.fb.group({
+      dossierId: ['', Validators.required],
+      rapportCode: [''],
+      // ... autres champs
+    });
+  }
+  
+  ngOnInit() {
+    this.loadDossiers();
+  }
+  
+  loadDossiers() {
+    this.dossierService.getAllDossiers().subscribe(dossiers => {
+      // Filtrer les dossiers qui n'ont pas déjà une enquête
+      this.dossiers = dossiers.filter(dossier => {
+        // Vérifier si le dossier a déjà une enquête
+        this.enqueteService.getEnqueteByDossier(dossier.id)
+          .subscribe(enquete => {
+            if (enquete) {
+              // Retirer ce dossier de la liste
+              this.dossiers = this.dossiers.filter(d => d.id !== dossier.id);
+            }
+          });
+        return true;
+      });
+    });
+  }
+  
+  onSubmit() {
+    if (this.enqueteForm.valid) {
+      this.loading = true;
+      const enqueteData = {
+        ...this.enqueteForm.value,
+        agentCreateurId: this.authService.getCurrentUser().id
+      };
+      
+      this.enqueteService.createEnquete(enqueteData)
+        .pipe(
+          finalize(() => this.loading = false),
+          catchError(error => {
+            this.snackBar.open('Erreur lors de la création', 'Fermer', { duration: 3000 });
+            return throwError(error);
+          })
+        )
+        .subscribe(enquete => {
+          this.snackBar.open('Enquête créée avec succès', 'Fermer', { duration: 3000 });
+          this.router.navigate(['/enquetes', enquete.id]);
+        });
+    }
+  }
+  
+  createAndRequestValidation() {
+    if (this.enqueteForm.valid) {
+      this.loading = true;
+      const enqueteData = {
+        ...this.enqueteForm.value,
+        agentCreateurId: this.authService.getCurrentUser().id
+      };
+      
+      this.enqueteService.createEnquete(enqueteData)
+        .pipe(
+          switchMap(enquete => {
+            // Créer automatiquement une validation
+            const validationData = {
+              enqueteId: enquete.id,
+              agentCreateurId: this.authService.getCurrentUser().id
+            };
+            return this.validationEnqueteService.createValidationEnquete(validationData);
+          }),
+          finalize(() => this.loading = false),
+          catchError(error => {
+            const message = error.error?.message || 'Erreur lors de la création';
+            this.snackBar.open(message, 'Fermer', { duration: 5000 });
+            return throwError(error);
+          })
+        )
+        .subscribe(validation => {
+          this.snackBar.open('Enquête créée et validation demandée avec succès', 'Fermer', { duration: 3000 });
+          this.router.navigate(['/enquetes', validation.enquete.id]);
+        });
+    }
+  }
+}
+```
+
+=== NOTES IMPORTANTES ===
+
+1. Relation Enquête-Dossier:
+   - Une enquête est liée à un seul dossier (OneToOne)
+   - Vérifier avant création qu'un dossier n'a pas déjà une enquête
+   - Le dossierId est obligatoire lors de la création
+
+2. Relation Enquête-Validation:
+   - Une enquête peut avoir plusieurs validations (historique)
+   - Mais une seule validation EN_ATTENTE à la fois
+   - Les validations VALIDE/REJETE sont conservées dans l'historique
+
+3. Permissions:
+   - Seuls les chefs (CHEF_DEPARTEMENT_*, SUPER_ADMIN) peuvent valider/rejeter
+   - Un agent ne peut pas valider/rejeter ses propres enquêtes
+   - Un agent peut modifier ses enquêtes seulement si non validées (valide=false)
+
+4. Notifications:
+   - Les notifications sont envoyées automatiquement par le backend
+   - Pas besoin de gérer les notifications côté frontend (sauf si système de notifications en temps réel)
+
+5. États de l'enquête:
+   - valide=false: Enquête non validée (peut être modifiée)
+   - valide=true: Enquête validée (ne peut plus être modifiée)
+   - dateValidation: Date de validation (si validée)
+   - commentaireValidation: Commentaire de validation/rejet
+
+6. États de validation:
+   - EN_ATTENTE: En attente de validation par un chef
+   - VALIDE: Validée par un chef
+   - REJETE: Rejetée par un chef
+
+FIN DU PROMPT
+
+
+
+
+
+
+

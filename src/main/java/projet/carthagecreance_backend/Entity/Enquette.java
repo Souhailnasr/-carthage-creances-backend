@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -90,6 +91,25 @@ public class Enquette implements Serializable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agent_responsable_id")
     private Utilisateur agentResponsable;
+
+    // Champs transients pour accepter les IDs depuis le JSON
+    @Transient
+    @JsonProperty("agentCreateurId")
+    private Long agentCreateurId;
+
+    @Transient
+    @JsonProperty("agentResponsableId")
+    private Long agentResponsableId;
+
+    @Transient
+    @JsonProperty("dossierId")
+    private Long dossierId;
+
+    // Statut de l'enquête (même logique que Dossier)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "statut")
+    @Builder.Default
+    private Statut statut = Statut.EN_ATTENTE_VALIDATION;
 
     // Propriétés de validation
     @Column(name = "valide")

@@ -133,4 +133,10 @@ public interface ValidationEnqueteService {
      * @return Nombre de validations du chef
      */
     long countValidationsByChef(Long chefId);
+    
+    /**
+     * Nettoie les validations orphelines (dont l'enquête n'existe plus)
+     * @return Nombre de validations orphelines supprimées
+     */
+    int nettoyerValidationsOrphelines();
 }

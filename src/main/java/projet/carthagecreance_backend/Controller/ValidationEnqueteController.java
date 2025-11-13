@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.ValidationEnquete;
@@ -249,17 +250,58 @@ public class ValidationEnqueteController {
      * POST /api/validation/enquetes/1/valider?chefId=2&commentaire=Enquête validée avec succès
      */
     @PostMapping("/{id}/valider")
-    public ResponseEntity<ValidationEnquete> validerEnquete(
+    public ResponseEntity<?> validerEnquete(
             @PathVariable Long id,
             @RequestParam Long chefId,
             @RequestParam(required = false) String commentaire) {
         try {
-            ValidationEnquete validation = validationEnqueteService.validerEnquete(id, chefId, commentaire);
-            return ResponseEntity.ok(validation);
+            // Récupérer la validation par son ID pour obtenir l'ID de l'enquête
+            ValidationEnquete validation;
+            try {
+                validation = validationEnqueteService.getValidationEnqueteById(id);
+            } catch (RuntimeException e) {
+                // La validation n'existe pas
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Erreur : " + e.getMessage());
+            }
+            
+            // Vérifier que la validation est en attente
+            if (validation.getStatut() != StatutValidation.EN_ATTENTE) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Erreur : Cette validation n'est pas en attente. Statut actuel : " + validation.getStatut());
+            }
+            
+            // Extraire l'ID de l'enquête depuis la validation
+            if (validation.getEnquete() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Erreur : Aucune enquête associée à cette validation");
+            }
+            
+            Long enqueteId = validation.getEnquete().getId();
+            if (enqueteId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Erreur : L'enquête associée à cette validation n'a pas d'ID");
+            }
+            
+            // Valider l'enquête en utilisant l'ID de l'enquête
+            ValidationEnquete validationMiseAJour = validationEnqueteService.validerEnquete(enqueteId, chefId, commentaire);
+            return ResponseEntity.ok(validationMiseAJour);
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().build();
+            // Logger l'erreur pour le débogage
+            System.err.println("Erreur lors de la validation de l'enquête (validation ID: " + id + ") par le chef " + chefId + ": " + e.getMessage());
+            e.printStackTrace();
+            
+            // Retourner un message d'erreur détaillé au frontend
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Erreur lors de la validation de l'enquête";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Erreur : " + errorMessage);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+            // Logger l'erreur pour le débogage
+            System.err.println("Erreur inattendue lors de la validation de l'enquête (validation ID: " + id + "): " + e.getMessage());
+            e.printStackTrace();
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur serveur lors de la validation de l'enquête : " + e.getMessage());
         }
     }
 
@@ -275,17 +317,58 @@ public class ValidationEnqueteController {
      * POST /api/validation/enquetes/1/rejeter?chefId=2&commentaire=Informations manquantes
      */
     @PostMapping("/{id}/rejeter")
-    public ResponseEntity<ValidationEnquete> rejeterEnquete(
+    public ResponseEntity<?> rejeterEnquete(
             @PathVariable Long id,
             @RequestParam Long chefId,
             @RequestParam(required = false) String commentaire) {
         try {
-            ValidationEnquete validation = validationEnqueteService.rejeterEnquete(id, chefId, commentaire);
-            return ResponseEntity.ok(validation);
+            // Récupérer la validation par son ID pour obtenir l'ID de l'enquête
+            ValidationEnquete validation;
+            try {
+                validation = validationEnqueteService.getValidationEnqueteById(id);
+            } catch (RuntimeException e) {
+                // La validation n'existe pas
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Erreur : " + e.getMessage());
+            }
+            
+            // Vérifier que la validation est en attente
+            if (validation.getStatut() != StatutValidation.EN_ATTENTE) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Erreur : Cette validation n'est pas en attente. Statut actuel : " + validation.getStatut());
+            }
+            
+            // Extraire l'ID de l'enquête depuis la validation
+            if (validation.getEnquete() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Erreur : Aucune enquête associée à cette validation");
+            }
+            
+            Long enqueteId = validation.getEnquete().getId();
+            if (enqueteId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body("Erreur : L'enquête associée à cette validation n'a pas d'ID");
+            }
+            
+            // Rejeter l'enquête en utilisant l'ID de l'enquête
+            ValidationEnquete validationMiseAJour = validationEnqueteService.rejeterEnquete(enqueteId, chefId, commentaire);
+            return ResponseEntity.ok(validationMiseAJour);
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().build();
+            // Logger l'erreur pour le débogage
+            System.err.println("Erreur lors du rejet de l'enquête (validation ID: " + id + ") par le chef " + chefId + ": " + e.getMessage());
+            e.printStackTrace();
+            
+            // Retourner un message d'erreur détaillé au frontend
+            String errorMessage = e.getMessage() != null ? e.getMessage() : "Erreur lors du rejet de l'enquête";
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Erreur : " + errorMessage);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+            // Logger l'erreur pour le débogage
+            System.err.println("Erreur inattendue lors du rejet de l'enquête (validation ID: " + id + "): " + e.getMessage());
+            e.printStackTrace();
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Erreur serveur lors du rejet de l'enquête : " + e.getMessage());
         }
     }
 
@@ -366,6 +449,24 @@ public class ValidationEnqueteController {
     public ResponseEntity<Long> countValidationsByChef(@PathVariable Long chefId) {
         try {
             long count = validationEnqueteService.countValidationsByChef(chefId);
+            return ResponseEntity.ok(count);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Nettoie les validations orphelines (dont l'enquête n'existe plus)
+     * 
+     * @return ResponseEntity avec le nombre de validations supprimées (200 OK)
+     * 
+     * @example
+     * POST /api/validation/enquetes/nettoyer-orphelines
+     */
+    @PostMapping("/nettoyer-orphelines")
+    public ResponseEntity<Integer> nettoyerValidationsOrphelines() {
+        try {
+            int count = validationEnqueteService.nettoyerValidationsOrphelines();
             return ResponseEntity.ok(count);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();

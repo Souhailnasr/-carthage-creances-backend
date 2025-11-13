@@ -369,3 +369,10 @@ IMPORTANT:
 - Afficher des messages de feedback clairs à l'utilisateur
 - Désactiver les boutons pendant les appels API pour éviter les doubles soumissions
 
+
+
+
+
+
+
+

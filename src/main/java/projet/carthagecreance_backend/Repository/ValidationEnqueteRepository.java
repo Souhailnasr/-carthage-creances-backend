@@ -81,4 +81,8 @@ public interface ValidationEnqueteRepository extends JpaRepository<ValidationEnq
 
     // Vérifier l'existence d'une validation en attente pour une enquête
     boolean existsByEnqueteIdAndStatut(Long enqueteId, StatutValidation statut);
+    
+    // Trouver les validations en attente avec enquête existante (JOIN pour éviter les orphelines)
+    @Query("SELECT v FROM ValidationEnquete v WHERE v.statut = 'EN_ATTENTE' AND v.enquete IS NOT NULL")
+    List<ValidationEnquete> findEnquetesEnAttenteWithExistingEnquete();
 }

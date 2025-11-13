@@ -30,3 +30,10 @@ DESCRIBE debiteur;
 
 
 
+
+
+
+
+
+
+

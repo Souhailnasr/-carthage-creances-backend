@@ -11,6 +11,13 @@ public interface EnquetteService {
     // CRUD Operations
     Enquette createEnquette(Enquette enquette);
     Optional<Enquette> getEnquetteById(Long id);
+    
+    /**
+     * Vérifie si une enquête existe par son ID (utilise une requête native pour éviter les problèmes avec dossier_id = NULL)
+     * @param id L'ID de l'enquête
+     * @return true si l'enquête existe, false sinon
+     */
+    boolean existsById(Long id);
     List<Enquette> getAllEnquettes();
     Enquette updateEnquette(Long id, Enquette enquette);
     void deleteEnquette(Long id);
@@ -28,4 +35,17 @@ public interface EnquetteService {
     List<Enquette> getEnquettesWithRealEstate();
     List<Enquette> getEnquettesWithMovableProperty();
     List<Enquette> getEnquettesWithObservations();
+    
+    // Validation Operations
+    void validerEnquette(Long enquetteId, Long chefId);
+    void rejeterEnquette(Long enquetteId, String commentaire);
+    
+    // Statistics Operations
+    long countTotalEnquettes();
+    long countEnquettesByStatut(projet.carthagecreance_backend.Entity.Statut statut);
+    long countEnquettesValides();
+    long countEnquettesNonValides();
+    long countEnquettesCreesCeMois();
+    long countEnquettesByAgentCreateur(Long agentId);
+    long countEnquettesByAgentResponsable(Long agentId);
 }

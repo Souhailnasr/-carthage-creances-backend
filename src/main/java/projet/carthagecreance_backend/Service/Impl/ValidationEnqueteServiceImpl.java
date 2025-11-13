@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.Entity.ValidationEnquete;
 import projet.carthagecreance_backend.Entity.StatutValidation;
+import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Entity.Enquette;
 import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Entity.RoleUtilisateur;
@@ -16,6 +17,7 @@ import projet.carthagecreance_backend.Service.NotificationService;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Implémentation du service de gestion des validations d'enquêtes
@@ -61,8 +63,25 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
             throw new RuntimeException("L'enquête est obligatoire");
         }
         
-        Enquette enquete = enquetteService.getEnquetteById(validation.getEnquete().getId())
+        // Vérifier que l'enquête existe avec une méthode qui évite les problèmes avec dossier_id = NULL
+        if (!enquetteService.existsById(validation.getEnquete().getId())) {
+            throw new RuntimeException("Enquête non trouvée avec l'ID: " + validation.getEnquete().getId());
+        }
+        
+        // Essayer de charger l'enquête, mais gérer le cas où dossier_id est NULL
+        Enquette enquete;
+        try {
+            enquete = enquetteService.getEnquetteById(validation.getEnquete().getId())
                 .orElseThrow(() -> new RuntimeException("Enquête non trouvée avec l'ID: " + validation.getEnquete().getId()));
+        } catch (Exception e) {
+            // Si l'enquête existe mais ne peut pas être chargée (dossier_id NULL), on peut quand même créer la validation
+            // car la validation ne nécessite pas que l'enquête soit complètement chargée
+            System.err.println("Avertissement: L'enquête " + validation.getEnquete().getId() + " existe mais ne peut pas être chargée (dossier_id NULL). La validation sera créée quand même.");
+            // Créer une enquête minimale pour la validation
+            enquete = Enquette.builder()
+                    .id(validation.getEnquete().getId())
+                    .build();
+        }
         
         // Vérifier qu'il n'y a pas déjà une validation en attente pour cette enquête
         if (validationEnqueteRepository.existsByEnqueteIdAndStatut(enquete.getId(), StatutValidation.EN_ATTENTE)) {
@@ -140,12 +159,30 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
 
     /**
      * Récupère les enquêtes en attente de validation
-     * @return Liste des validations en attente
+     * Filtre les validations orphelines (dont l'enquête n'existe plus)
+     * @return Liste des validations en attente avec enquête existante
      */
     @Override
     @Transactional(readOnly = true)
     public List<ValidationEnquete> getEnquetesEnAttente() {
-        return validationEnqueteRepository.findEnquetesEnAttente();
+        // Récupérer toutes les validations en attente
+        List<ValidationEnquete> validations = validationEnqueteRepository.findEnquetesEnAttente();
+        
+        // Filtrer pour ne garder que celles dont l'enquête existe encore
+        return validations.stream()
+                .filter(validation -> {
+                    try {
+                        // Vérifier que l'enquête existe
+                        if (validation.getEnquete() == null || validation.getEnquete().getId() == null) {
+                            return false;
+                        }
+                        return enquetteService.existsById(validation.getEnquete().getId());
+                    } catch (Exception e) {
+                        // Si erreur lors de la vérification, considérer comme orpheline
+                        return false;
+                    }
+                })
+                .toList();
     }
 
     /**
@@ -229,17 +266,44 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
         validation.setDateValidation(LocalDateTime.now());
         validation.setCommentaires(commentaire);
         
-        // Mettre à jour le statut de l'enquête
-        Enquette enquete = enquetteService.getEnquetteById(enqueteId)
-                .orElseThrow(() -> new RuntimeException("Enquête non trouvée avec l'ID: " + enqueteId));
+        // Vérifier que l'enquête existe
+        if (!enquetteService.existsById(enqueteId)) {
+            throw new RuntimeException("Enquête non trouvée avec l'ID: " + enqueteId);
+        }
         
-        // Ici, on pourrait mettre à jour le statut de l'enquête selon la logique métier
-        // Par exemple, passer l'enquête en "VALIDÉE" ou "APPROUVÉE"
+        // Mettre à jour le statut de l'enquête en utilisant la méthode de validation du service
+        // qui gère les cas où dossier_id est NULL
+        try {
+            // Utiliser directement la méthode validerEnquette du service qui gère déjà le cas dossier_id NULL
+            // Mais on a besoin du chefId, donc on va utiliser updateEnquette avec une enquête minimale
+            Enquette enquete = Enquette.builder()
+                    .id(enqueteId)
+                    .valide(true)
+                    .dateValidation(LocalDateTime.now())
+                    .statut(Statut.VALIDE)
+                    .build();
+        enquetteService.updateEnquette(enqueteId, enquete);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la mise à jour de l'enquête " + enqueteId + ": " + e.getMessage());
+            // Si la mise à jour échoue à cause de dossier_id NULL, on peut quand même continuer
+            // car la validation a été mise à jour
+        }
         
         // Envoyer une notification à l'agent créateur
+        // Essayer de récupérer le rapportCode, sinon utiliser l'ID
+        String rapportCode = "ID " + enqueteId;
+        try {
+            Optional<Enquette> enqueteOpt = enquetteService.getEnquetteById(enqueteId);
+            if (enqueteOpt.isPresent() && enqueteOpt.get().getRapportCode() != null) {
+                rapportCode = enqueteOpt.get().getRapportCode();
+            }
+        } catch (Exception e) {
+            // Utiliser l'ID par défaut si on ne peut pas charger l'enquête
+        }
+        
         notificationService.envoyerNotificationValidation(
             validation.getAgentCreateur(),
-            "Enquête " + enquete.getRapportCode(),
+            "Enquête " + rapportCode,
             "VALIDÉE",
             commentaire
         );
@@ -284,13 +348,42 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
         validation.setDateValidation(LocalDateTime.now());
         validation.setCommentaires(commentaire);
         
+        // Vérifier que l'enquête existe
+        if (!enquetteService.existsById(enqueteId)) {
+            throw new RuntimeException("Enquête non trouvée avec l'ID: " + enqueteId);
+        }
+        
+        // Mettre à jour le statut de l'enquête en utilisant la méthode de rejet du service
+        // qui gère les cas où dossier_id est NULL
+        try {
+            Enquette enquete = Enquette.builder()
+                    .id(enqueteId)
+                    .valide(false)
+                    .commentaireValidation(commentaire)
+                    .statut(Statut.REJETE)
+                    .build();
+        enquetteService.updateEnquette(enqueteId, enquete);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la mise à jour de l'enquête " + enqueteId + ": " + e.getMessage());
+            // Si la mise à jour échoue à cause de dossier_id NULL, on peut quand même continuer
+            // car la validation a été mise à jour
+        }
+        
         // Envoyer une notification à l'agent créateur
-        Enquette enquete = enquetteService.getEnquetteById(enqueteId)
-                .orElseThrow(() -> new RuntimeException("Enquête non trouvée avec l'ID: " + enqueteId));
+        // Essayer de récupérer le rapportCode, sinon utiliser l'ID
+        String rapportCode = "ID " + enqueteId;
+        try {
+            Optional<Enquette> enqueteOpt = enquetteService.getEnquetteById(enqueteId);
+            if (enqueteOpt.isPresent() && enqueteOpt.get().getRapportCode() != null) {
+                rapportCode = enqueteOpt.get().getRapportCode();
+            }
+        } catch (Exception e) {
+            // Utiliser l'ID par défaut si on ne peut pas charger l'enquête
+        }
         
         notificationService.envoyerNotificationValidation(
             validation.getAgentCreateur(),
-            "Enquête " + enquete.getRapportCode(),
+            "Enquête " + rapportCode,
             "REJETÉE",
             commentaire
         );
@@ -374,6 +467,40 @@ public class ValidationEnqueteServiceImpl implements ValidationEnqueteService {
         if (validation.getAgentCreateur() == null || validation.getAgentCreateur().getId() == null) {
             throw new RuntimeException("L'agent créateur est obligatoire");
         }
+    }
+
+    /**
+     * Nettoie les validations orphelines (dont l'enquête n'existe plus)
+     * @return Nombre de validations orphelines supprimées
+     */
+    @Override
+    @Transactional
+    public int nettoyerValidationsOrphelines() {
+        // Récupérer toutes les validations
+        List<ValidationEnquete> allValidations = validationEnqueteRepository.findAll();
+        
+        // Identifier les validations orphelines
+        List<ValidationEnquete> orphelines = allValidations.stream()
+                .filter(validation -> {
+                    try {
+                        if (validation.getEnquete() == null || validation.getEnquete().getId() == null) {
+                            return true; // Orpheline si pas d'enquête
+                        }
+                        // Vérifier si l'enquête existe
+                        return !enquetteService.existsById(validation.getEnquete().getId());
+                    } catch (Exception e) {
+                        // En cas d'erreur, considérer comme orpheline
+                        return true;
+                    }
+                })
+                .toList();
+        
+        // Supprimer les validations orphelines
+        if (!orphelines.isEmpty()) {
+            validationEnqueteRepository.deleteAll(orphelines);
+        }
+        
+        return orphelines.size();
     }
 
     /**
