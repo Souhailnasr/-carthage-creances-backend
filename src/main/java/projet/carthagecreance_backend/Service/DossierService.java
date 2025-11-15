@@ -213,4 +213,39 @@ public interface DossierService {
     Dossier assignerAgentResponsable(Long dossierId, Long agentId);
     Dossier assignerAvocat(Long dossierId, Long avocatId);
     Dossier assignerHuissier(Long dossierId, Long huissierId);
+    
+    /**
+     * Affecte un dossier validé au chef du département recouvrement amiable
+     * @param dossierId L'ID du dossier à affecter
+     * @return Le dossier mis à jour avec le chef amiable assigné comme agentResponsable
+     * @throws RuntimeException si le dossier n'existe pas, n'est pas validé, ou si aucun chef amiable n'est trouvé
+     */
+    Dossier affecterAuRecouvrementAmiable(Long dossierId);
+    
+    /**
+     * Affecte un dossier validé au chef du département recouvrement juridique
+     * @param dossierId L'ID du dossier à affecter
+     * @return Le dossier mis à jour avec le chef juridique assigné comme agentResponsable
+     * @throws RuntimeException si le dossier n'existe pas, n'est pas validé, ou si aucun chef juridique n'est trouvé
+     */
+    Dossier affecterAuRecouvrementJuridique(Long dossierId);
+    
+    /**
+     * Clôture un dossier validé
+     * @param dossierId L'ID du dossier à clôturer
+     * @return Le dossier mis à jour avec dossierStatus = CLOTURE et dateCloture remplie
+     * @throws RuntimeException si le dossier n'existe pas ou n'est pas validé
+     */
+    Dossier cloturerDossier(Long dossierId);
+    
+    /**
+     * Récupère les dossiers validés disponibles pour l'affectation
+     * @param page Numéro de page (0-indexed)
+     * @param size Taille de la page
+     * @param sort Champ de tri
+     * @param direction Direction du tri (ASC ou DESC)
+     * @param search Terme de recherche (optionnel)
+     * @return Map contenant la liste paginée des dossiers et les métadonnées de pagination
+     */
+    Map<String, Object> getDossiersValidesDisponibles(int page, int size, String sort, String direction, String search);
 }

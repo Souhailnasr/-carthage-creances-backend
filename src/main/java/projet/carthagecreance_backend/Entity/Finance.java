@@ -27,6 +27,44 @@ public class Finance implements Serializable {
     // ✅ Frais Avocat & Huissier
     private Double fraisAvocat;
     private Double fraisHuissier;
+    
+    // ✅ Coûts de création et gestion
+    @Column(name = "frais_creation_dossier")
+    @Builder.Default
+    private Double fraisCreationDossier = 50.0;
+    
+    @Column(name = "frais_gestion_dossier")
+    @Builder.Default
+    private Double fraisGestionDossier = 10.0;
+    
+    @Column(name = "duree_gestion_mois")
+    @Builder.Default
+    private Integer dureeGestionMois = 0;
+    
+    // ✅ Coûts des actions
+    @Column(name = "cout_actions_amiable")
+    @Builder.Default
+    private Double coutActionsAmiable = 0.0;
+    
+    @Column(name = "cout_actions_juridique")
+    @Builder.Default
+    private Double coutActionsJuridique = 0.0;
+    
+    @Column(name = "nombre_actions_amiable")
+    @Builder.Default
+    private Integer nombreActionsAmiable = 0;
+    
+    @Column(name = "nombre_actions_juridique")
+    @Builder.Default
+    private Integer nombreActionsJuridique = 0;
+    
+    // ✅ Statut de facturation
+    @Column(name = "facture_finalisee")
+    @Builder.Default
+    private Boolean factureFinalisee = false;
+    
+    @Column(name = "date_facturation")
+    private LocalDate dateFacturation;
 
     // ✅ Relation avec Dossier
     @OneToOne
@@ -53,6 +91,31 @@ public class Finance implements Serializable {
         double totalAvocat = (fraisAvocat != null ? fraisAvocat : 0.0);
         double totalHuissier = (fraisHuissier != null ? fraisHuissier : 0.0);
         return totalActions + totalAvocat + totalHuissier;
+    }
+    
+    // ✅ Calcul coût total des actions (amiable + juridique)
+    public Double calculerCoutTotalActions() {
+        double totalAmiable = (coutActionsAmiable != null ? coutActionsAmiable : 0.0);
+        double totalJuridique = (coutActionsJuridique != null ? coutActionsJuridique : 0.0);
+        return totalAmiable + totalJuridique;
+    }
+    
+    // ✅ Calcul coût total de gestion
+    public Double calculerCoutGestionTotal() {
+        double fraisGestion = (fraisGestionDossier != null ? fraisGestionDossier : 0.0);
+        int duree = (dureeGestionMois != null ? dureeGestionMois : 0);
+        return fraisGestion * duree;
+    }
+    
+    // ✅ Calcul facture finale complète
+    public Double calculerFactureFinale() {
+        double fraisCreation = (fraisCreationDossier != null ? fraisCreationDossier : 0.0);
+        double coutGestion = calculerCoutGestionTotal();
+        double coutActions = calculerCoutTotalActions();
+        double fraisAvocat = (this.fraisAvocat != null ? this.fraisAvocat : 0.0);
+        double fraisHuissier = (this.fraisHuissier != null ? this.fraisHuissier : 0.0);
+        
+        return fraisCreation + coutGestion + coutActions + fraisAvocat + fraisHuissier;
     }
 }
 

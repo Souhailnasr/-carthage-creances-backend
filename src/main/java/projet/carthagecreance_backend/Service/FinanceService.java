@@ -32,4 +32,14 @@ public interface FinanceService {
     Double calculateTotalGlobalFees();
     Double calculateTotalFeesByCurrency(String currency);
     Double calculateTotalActionCosts(Long financeId);
+    
+    // ✅ Nouvelles méthodes pour la facturation complète
+    Double calculerFactureFinale(Long dossierId);
+    java.util.Map<String, Object> getDetailFacture(Long dossierId);
+    Finance recalculerCoutsDossier(Long dossierId);
+    java.util.Map<String, Object> getStatistiquesCouts();
+    java.util.Map<String, Object> getCoutsParDossier(Long dossierId);
+    org.springframework.data.domain.Page<Finance> getDossiersAvecCouts(int page, int size, String sort);
+    List<Finance> getFacturesEnAttente();
+    Finance finaliserFacture(Long dossierId);
 }

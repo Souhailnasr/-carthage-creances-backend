@@ -151,4 +151,79 @@ public class FinanceController {
         Double total = financeService.calculateTotalActionCosts(financeId);
         return new ResponseEntity<>(total, HttpStatus.OK);
     }
+    
+    // ✅ Nouveaux endpoints pour la facturation complète
+    
+    @GetMapping("/dossier/{dossierId}/facture")
+    public ResponseEntity<?> getDetailFacture(@PathVariable Long dossierId) {
+        try {
+            java.util.Map<String, Object> detail = financeService.getDetailFacture(dossierId);
+            return new ResponseEntity<>(detail, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        }
+    }
+    
+    @GetMapping("/dossier/{dossierId}/detail")
+    public ResponseEntity<?> getCoutsParDossier(@PathVariable Long dossierId) {
+        try {
+            java.util.Map<String, Object> couts = financeService.getCoutsParDossier(dossierId);
+            return new ResponseEntity<>(couts, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        }
+    }
+    
+    @PostMapping("/dossier/{dossierId}/recalculer")
+    public ResponseEntity<?> recalculerCouts(@PathVariable Long dossierId) {
+        try {
+            Finance finance = financeService.recalculerCoutsDossier(dossierId);
+            return new ResponseEntity<>(finance, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        }
+    }
+    
+    @GetMapping("/statistiques")
+    public ResponseEntity<?> getStatistiquesCouts() {
+        try {
+            java.util.Map<String, Object> stats = financeService.getStatistiquesCouts();
+            return new ResponseEntity<>(stats, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    @GetMapping("/dossiers-avec-couts")
+    public ResponseEntity<?> getDossiersAvecCouts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "dateOperation") String sort) {
+        try {
+            org.springframework.data.domain.Page<Finance> pageResult = financeService.getDossiersAvecCouts(page, size, sort);
+            return new ResponseEntity<>(pageResult, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    @GetMapping("/factures-en-attente")
+    public ResponseEntity<?> getFacturesEnAttente() {
+        try {
+            List<Finance> factures = financeService.getFacturesEnAttente();
+            return new ResponseEntity<>(factures, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    @PutMapping("/dossier/{dossierId}/finaliser-facture")
+    public ResponseEntity<?> finaliserFacture(@PathVariable Long dossierId) {
+        try {
+            Finance finance = financeService.finaliserFacture(dossierId);
+            return new ResponseEntity<>(finance, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        }
+    }
 }

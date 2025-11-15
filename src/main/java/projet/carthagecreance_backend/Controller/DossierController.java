@@ -18,6 +18,13 @@ import projet.carthagecreance_backend.Service.FileStorageService;
 import projet.carthagecreance_backend.SecurityServices.UserExtractionService;
 import projet.carthagecreance_backend.Entity.Utilisateur;
 import projet.carthagecreance_backend.Entity.RoleUtilisateur;
+import projet.carthagecreance_backend.Entity.TypeRecouvrement;
+import projet.carthagecreance_backend.Entity.DossierStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import projet.carthagecreance_backend.Repository.DossierRepository;
 
 import java.util.Date;
 import java.util.List;
@@ -46,6 +53,9 @@ public class DossierController {
 
     @Autowired
     private DossierService dossierService;
+    
+    @Autowired
+    private DossierRepository dossierRepository;
     
     @Autowired
     private FileStorageService fileStorageService;
@@ -294,6 +304,126 @@ public class DossierController {
      * contratSigne: [PDF file]
      */
 
+
+    /**
+     * Récupère les dossiers affectés au recouvrement amiable avec pagination
+     * 
+     * @param page Numéro de page (défaut: 0)
+     * @param size Taille de la page (défaut: 10)
+     * @param sort Champ de tri (défaut: "dateCreation")
+     * @return ResponseEntity avec la page des dossiers amiable (200 OK) ou erreur (500)
+     * 
+     * @example
+     * GET /api/dossiers/recouvrement-amiable?page=0&size=10&sort=dateCreation
+     */
+    @GetMapping("/recouvrement-amiable")
+    public ResponseEntity<?> getDossiersRecouvrementAmiable(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "dateCreation") String sort) {
+        try {
+            // Validation des paramètres
+            if (page < 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Le numéro de page doit être >= 0"));
+            }
+            if (size <= 0 || size > 100) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La taille de page doit être entre 1 et 100"));
+            }
+            
+            // Créer la pagination avec tri
+            Sort.Direction sortDirection = Sort.Direction.DESC;
+            Sort sortObj = Sort.by(sortDirection, sort);
+            Pageable pageable = PageRequest.of(page, size, sortObj);
+            
+            // Récupérer les dossiers avec pagination
+            Page<Dossier> dossierPage = dossierRepository.findByTypeRecouvrementAndValideAndDossierStatus(
+                TypeRecouvrement.AMIABLE,
+                DossierStatus.ENCOURSDETRAITEMENT,
+                pageable
+            );
+            
+            // Construire la réponse
+            Map<String, Object> result = Map.of(
+                "content", dossierPage.getContent(),
+                "totalElements", dossierPage.getTotalElements(),
+                "totalPages", dossierPage.getTotalPages(),
+                "currentPage", dossierPage.getNumber(),
+                "size", dossierPage.getSize(),
+                "first", dossierPage.isFirst(),
+                "last", dossierPage.isLast(),
+                "numberOfElements", dossierPage.getNumberOfElements()
+            );
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des dossiers recouvrement amiable: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de la récupération: " + e.getMessage()
+                    ));
+        }
+    }
+
+    /**
+     * Récupère les dossiers affectés au recouvrement juridique avec pagination
+     * 
+     * @param page Numéro de page (défaut: 0)
+     * @param size Taille de la page (défaut: 10)
+     * @param sort Champ de tri (défaut: "dateCreation")
+     * @return ResponseEntity avec la page des dossiers juridique (200 OK) ou erreur (500)
+     * 
+     * @example
+     * GET /api/dossiers/recouvrement-juridique?page=0&size=10&sort=dateCreation
+     */
+    @GetMapping("/recouvrement-juridique")
+    public ResponseEntity<?> getDossiersRecouvrementJuridique(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "dateCreation") String sort) {
+        try {
+            // Validation des paramètres
+            if (page < 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Le numéro de page doit être >= 0"));
+            }
+            if (size <= 0 || size > 100) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La taille de page doit être entre 1 et 100"));
+            }
+            
+            // Créer la pagination avec tri
+            Sort.Direction sortDirection = Sort.Direction.DESC;
+            Sort sortObj = Sort.by(sortDirection, sort);
+            Pageable pageable = PageRequest.of(page, size, sortObj);
+            
+            // Récupérer les dossiers avec pagination
+            Page<Dossier> dossierPage = dossierRepository.findByTypeRecouvrementAndValideAndDossierStatus(
+                TypeRecouvrement.JURIDIQUE,
+                DossierStatus.ENCOURSDETRAITEMENT,
+                pageable
+            );
+            
+            // Construire la réponse
+            Map<String, Object> result = Map.of(
+                "content", dossierPage.getContent(),
+                "totalElements", dossierPage.getTotalElements(),
+                "totalPages", dossierPage.getTotalPages(),
+                "currentPage", dossierPage.getNumber(),
+                "size", dossierPage.getSize(),
+                "first", dossierPage.isFirst(),
+                "last", dossierPage.isLast(),
+                "numberOfElements", dossierPage.getNumberOfElements()
+            );
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des dossiers recouvrement juridique: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de la récupération: " + e.getMessage()
+                    ));
+        }
+    }
 
     /**
      * Récupère un dossier par son ID
@@ -1104,6 +1234,135 @@ public class DossierController {
                         "error", "Erreur interne du serveur",
                         "message", "Erreur lors de l'assignation de l'huissier: " + e.getMessage(),
                         "timestamp", new Date().toString()
+                    ));
+        }
+    }
+    
+    /**
+     * Affecte un dossier validé au recouvrement amiable
+     * 
+     * @param id L'ID du dossier à affecter
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur
+     * 
+     * @example
+     * PUT /api/dossiers/1/affecter/recouvrement-amiable
+     */
+    @PutMapping("/{id}/affecter/recouvrement-amiable")
+    public ResponseEntity<?> affecterAuRecouvrementAmiable(@PathVariable Long id) {
+        try {
+            Dossier updatedDossier = dossierService.affecterAuRecouvrementAmiable(id);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'affectation au recouvrement amiable: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'affectation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'affectation: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'affectation: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+
+    /**
+     * Affecte un dossier validé au recouvrement juridique
+     * 
+     * @param id L'ID du dossier à affecter
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur
+     * 
+     * @example
+     * PUT /api/dossiers/1/affecter/recouvrement-juridique
+     */
+    @PutMapping("/{id}/affecter/recouvrement-juridique")
+    public ResponseEntity<?> affecterAuRecouvrementJuridique(@PathVariable Long id) {
+        try {
+            Dossier updatedDossier = dossierService.affecterAuRecouvrementJuridique(id);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'affectation au recouvrement juridique: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'affectation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'affectation: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'affectation: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+
+    /**
+     * Clôture un dossier validé
+     * 
+     * @param id L'ID du dossier à clôturer
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur
+     * 
+     * @example
+     * PUT /api/dossiers/1/cloturer
+     */
+    @PutMapping("/{id}/cloturer")
+    public ResponseEntity<?> cloturerDossier(@PathVariable Long id) {
+        try {
+            Dossier updatedDossier = dossierService.cloturerDossier(id);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la clôture du dossier: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur de clôture",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de la clôture: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de la clôture: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+    
+    /**
+     * Récupère les dossiers validés disponibles pour l'affectation
+     * 
+     * @param page Numéro de page (optionnel, défaut: 0)
+     * @param size Taille de la page (optionnel, défaut: 10)
+     * @param sort Champ de tri (optionnel, défaut: "dateCreation")
+     * @param direction Direction du tri (optionnel, défaut: "DESC")
+     * @param search Terme de recherche (optionnel)
+     * @return ResponseEntity avec la liste paginée des dossiers validés
+     * 
+     * @example
+     * GET /api/dossiers/valides-disponibles?page=0&size=10&sort=dateCreation&direction=DESC&search=Dossier61
+     */
+    @GetMapping("/valides-disponibles")
+    public ResponseEntity<?> getDossiersValidesDisponibles(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "dateCreation") String sort,
+            @RequestParam(defaultValue = "DESC") String direction,
+            @RequestParam(required = false) String search) {
+        try {
+            Map<String, Object> result = dossierService.getDossiersValidesDisponibles(page, size, sort, direction, search);
+            return new ResponseEntity<>(result, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des dossiers validés: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de la récupération: " + e.getMessage()
                     ));
         }
     }

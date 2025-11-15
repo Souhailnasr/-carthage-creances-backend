@@ -62,10 +62,21 @@ public class Dossier implements Serializable {
 
     @Enumerated(EnumType.STRING)
     private TypeDocumentJustificatif typeDocumentJustificatif;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type_recouvrement", nullable = true)
+    @Builder.Default
+    private TypeRecouvrement typeRecouvrement = TypeRecouvrement.NON_AFFECTE;
+    
     // Utilisateurs associés
     @ManyToMany
-
-    private List<Utilisateur> utilisateurs;
+    @JoinTable(
+        name = "dossier_utilisateurs",
+        joinColumns = @JoinColumn(name = "dossier_id"),
+        inverseJoinColumns = @JoinColumn(name = "utilisateur_id")
+    )
+    @Builder.Default
+    private List<Utilisateur> utilisateurs = new ArrayList<>();
 
     // Enquête (exactement 1)
     @OneToOne(mappedBy = "dossier", cascade = CascadeType.ALL)

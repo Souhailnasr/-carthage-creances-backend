@@ -14,7 +14,10 @@ import projet.carthagecreance_backend.Service.NotificationService;
 import projet.carthagecreance_backend.Service.TacheUrgenteService;
 import projet.carthagecreance_backend.DTO.DossierRequest;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
@@ -55,12 +58,21 @@ public class DossierServiceImpl implements DossierService {
 
     @Autowired
     private ValidationDossierRepository validationDossierRepository;
+    
+    @Autowired
+    private AvocatRepository avocatRepository;
+    
+    @Autowired
+    private HuissierRepository huissierRepository;
 
     @Autowired
     private NotificationService notificationService;
 
     @Autowired
     private TacheUrgenteService tacheUrgenteService;
+    
+    @Autowired
+    private FinanceRepository financeRepository;
 
     /**
      * Crée un nouveau dossier avec workflow de validation
@@ -129,6 +141,31 @@ public class DossierServiceImpl implements DossierService {
 
             // 5. Sauvegarder le Dossier
             Dossier savedDossier = dossierRepository.save(dossier);
+
+            // 5.5. Créer automatiquement une Finance pour ce dossier
+            try {
+                Finance finance = Finance.builder()
+                        .dossier(savedDossier)
+                        .devise("TND")
+                        .dateOperation(LocalDate.now())
+                        .description("Finance pour dossier " + savedDossier.getNumeroDossier())
+                        .fraisCreationDossier(50.0)
+                        .fraisGestionDossier(10.0)
+                        .dureeGestionMois(0)
+                        .coutActionsAmiable(0.0)
+                        .coutActionsJuridique(0.0)
+                        .nombreActionsAmiable(0)
+                        .nombreActionsJuridique(0)
+                        .factureFinalisee(false)
+                        .build();
+                financeRepository.save(finance);
+                logger.info("Finance créée automatiquement pour le dossier ID: {}", savedDossier.getId());
+            } catch (Exception e) {
+                logger.error("Erreur lors de la création automatique de Finance pour le dossier {}: {}", 
+                           savedDossier.getId(), e.getMessage());
+                // Ne pas faire échouer la création du dossier si Finance échoue
+                // La Finance pourra être créée manuellement plus tard
+            }
 
             // 6. Appliquer les règles de validation selon le rôle du créateur
             if (agentCreateur != null) {
@@ -638,18 +675,285 @@ public class DossierServiceImpl implements DossierService {
     }
 
     @Override
+    @Transactional
     public Dossier assignerAgentResponsable(Long dossierId, Long agentId) {
-        return null;
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que l'agent existe
+        Utilisateur agent = utilisateurRepository.findById(agentId)
+                .orElseThrow(() -> new RuntimeException("Agent non trouvé avec l'ID: " + agentId));
+        
+        // Assigner l'agent comme agent responsable
+        dossier.setAgentResponsable(agent);
+        
+        return dossierRepository.save(dossier);
     }
 
     @Override
+    @Transactional
     public Dossier assignerAvocat(Long dossierId, Long avocatId) {
-        return null;
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que l'avocat existe
+        Avocat avocat = avocatRepository.findById(avocatId)
+                .orElseThrow(() -> new RuntimeException("Avocat non trouvé avec l'ID: " + avocatId));
+        
+        // Assigner l'avocat
+        dossier.setAvocat(avocat);
+        
+        return dossierRepository.save(dossier);
     }
 
     @Override
+    @Transactional
     public Dossier assignerHuissier(Long dossierId, Long huissierId) {
-        return null;
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que l'huissier existe
+        Huissier huissier = huissierRepository.findById(huissierId)
+                .orElseThrow(() -> new RuntimeException("Huissier non trouvé avec l'ID: " + huissierId));
+        
+        // Assigner l'huissier
+        dossier.setHuissier(huissier);
+        
+        return dossierRepository.save(dossier);
+    }
+    
+    @Override
+    @Transactional
+    public Dossier affecterAuRecouvrementAmiable(Long dossierId) {
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que le dossier est validé
+        if (dossier.getStatut() != Statut.VALIDE || !Boolean.TRUE.equals(dossier.getValide())) {
+            throw new RuntimeException("Seuls les dossiers validés peuvent être affectés au recouvrement amiable");
+        }
+        
+        // Vérifier que le dossier n'est pas déjà clôturé
+        if (dossier.getDossierStatus() == DossierStatus.CLOTURE) {
+            throw new RuntimeException("Un dossier clôturé ne peut pas être affecté");
+        }
+        
+        // Vérifier qu'un dossier avec avocat ou huissier ne peut pas être affecté à l'amiable
+        if (dossier.getAvocat() != null || dossier.getHuissier() != null) {
+            throw new RuntimeException("Un dossier avec un avocat ou un huissier ne peut pas être affecté au recouvrement amiable");
+        }
+        
+        // Trouver le chef du département recouvrement amiable
+        List<Utilisateur> chefsAmiables = utilisateurRepository.findByRoleUtilisateur(
+            RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE
+        );
+        
+        if (chefsAmiables.isEmpty()) {
+            throw new RuntimeException("Aucun chef du département recouvrement amiable trouvé");
+        }
+        
+        // Prendre le premier chef amiable disponible
+        Utilisateur chefAmiable = chefsAmiables.get(0);
+        
+        // Assigner le chef comme agent responsable
+        dossier.setAgentResponsable(chefAmiable);
+        
+        // Mettre à jour le type de recouvrement
+        dossier.setTypeRecouvrement(TypeRecouvrement.AMIABLE);
+        
+        // Initialiser la liste utilisateurs si elle est null
+        if (dossier.getUtilisateurs() == null) {
+            dossier.setUtilisateurs(new ArrayList<>());
+        }
+        
+        // Ajouter le chef à la liste des utilisateurs associés (éviter les doublons)
+        if (!dossier.getUtilisateurs().contains(chefAmiable)) {
+            dossier.getUtilisateurs().add(chefAmiable);
+        }
+        
+        // Récupérer tous les agents du département recouvrement amiable
+        List<Utilisateur> agentsAmiables = utilisateurRepository.findByRoleUtilisateur(
+            RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE
+        );
+        
+        // Ajouter les agents à la liste des utilisateurs associés
+        for (Utilisateur agent : agentsAmiables) {
+            if (!dossier.getUtilisateurs().contains(agent)) {
+                dossier.getUtilisateurs().add(agent);
+            }
+        }
+        
+        // Sauvegarder
+        return dossierRepository.save(dossier);
+    }
+    
+    @Override
+    @Transactional
+    public Dossier affecterAuRecouvrementJuridique(Long dossierId) {
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que le dossier est validé
+        if (dossier.getStatut() != Statut.VALIDE || !Boolean.TRUE.equals(dossier.getValide())) {
+            throw new RuntimeException("Seuls les dossiers validés peuvent être affectés au recouvrement juridique");
+        }
+        
+        // Vérifier que le dossier n'est pas déjà clôturé
+        if (dossier.getDossierStatus() == DossierStatus.CLOTURE) {
+            throw new RuntimeException("Un dossier clôturé ne peut pas être affecté");
+        }
+        
+        // Trouver le chef du département recouvrement juridique
+        List<Utilisateur> chefsJuridiques = utilisateurRepository.findByRoleUtilisateur(
+            RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE
+        );
+        
+        if (chefsJuridiques.isEmpty()) {
+            throw new RuntimeException("Aucun chef du département recouvrement juridique trouvé");
+        }
+        
+        // Prendre le premier chef juridique disponible
+        Utilisateur chefJuridique = chefsJuridiques.get(0);
+        
+        // Assigner le chef comme agent responsable
+        dossier.setAgentResponsable(chefJuridique);
+        
+        // Mettre à jour le type de recouvrement
+        dossier.setTypeRecouvrement(TypeRecouvrement.JURIDIQUE);
+        
+        // Initialiser la liste utilisateurs si elle est null
+        if (dossier.getUtilisateurs() == null) {
+            dossier.setUtilisateurs(new ArrayList<>());
+        }
+        
+        // Ajouter le chef à la liste des utilisateurs associés (éviter les doublons)
+        if (!dossier.getUtilisateurs().contains(chefJuridique)) {
+            dossier.getUtilisateurs().add(chefJuridique);
+        }
+        
+        // Récupérer tous les agents du département recouvrement juridique
+        List<Utilisateur> agentsJuridiques = utilisateurRepository.findByRoleUtilisateur(
+            RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE
+        );
+        
+        // Ajouter les agents à la liste des utilisateurs associés
+        for (Utilisateur agent : agentsJuridiques) {
+            if (!dossier.getUtilisateurs().contains(agent)) {
+                dossier.getUtilisateurs().add(agent);
+            }
+        }
+        
+        // Sauvegarder
+        return dossierRepository.save(dossier);
+    }
+    
+    @Override
+    @Transactional
+    public Dossier cloturerDossier(Long dossierId) {
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que le dossier est validé
+        if (dossier.getStatut() != Statut.VALIDE || !Boolean.TRUE.equals(dossier.getValide())) {
+            throw new RuntimeException("Seuls les dossiers validés peuvent être clôturés");
+        }
+        
+        // Vérifier que le dossier n'est pas déjà clôturé
+        if (dossier.getDossierStatus() == DossierStatus.CLOTURE) {
+            throw new RuntimeException("Ce dossier est déjà clôturé");
+        }
+        
+        // Clôturer le dossier
+        dossier.setDossierStatus(DossierStatus.CLOTURE);
+        dossier.setDateCloture(new java.util.Date());
+        Dossier savedDossier = dossierRepository.save(dossier);
+        
+        // Mettre à jour la Finance avec la durée de gestion
+        try {
+            Optional<Finance> financeOpt = financeRepository.findByDossierId(dossierId);
+            if (financeOpt.isPresent()) {
+                Finance finance = financeOpt.get();
+                
+                // Calculer la durée de gestion en mois
+                if (dossier.getDateCreation() != null) {
+                    LocalDate dateCreation = dossier.getDateCreation().toInstant()
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDate();
+                    LocalDate dateCloture = LocalDate.now();
+                    
+                    long mois = ChronoUnit.MONTHS.between(dateCreation, dateCloture);
+                    // Arrondir au mois supérieur
+                    int dureeMois = (int) Math.max(1, mois + 1);
+                    
+                    finance.setDureeGestionMois(dureeMois);
+                    financeRepository.save(finance);
+                    logger.info("Finance mise à jour pour dossier {} : durée gestion = {} mois", dossierId, dureeMois);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Erreur lors de la mise à jour de Finance pour le dossier {}: {}", dossierId, e.getMessage());
+            // Ne pas faire échouer la clôture si Finance échoue
+        }
+        
+        return savedDossier;
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> getDossiersValidesDisponibles(int page, int size, String sort, String direction, String search) {
+        // Créer la pagination
+        Sort.Direction sortDirection = direction.equalsIgnoreCase("ASC") ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort sortObj = Sort.by(sortDirection, sort);
+        Pageable pageable = PageRequest.of(page, size, sortObj);
+        
+        // Créer la spécification pour filtrer les dossiers validés et non clôturés
+        Specification<Dossier> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new java.util.ArrayList<>();
+            
+            // Statut = VALIDE
+            predicates.add(cb.equal(root.get("statut"), Statut.VALIDE));
+            
+            // valide = true
+            predicates.add(cb.equal(root.get("valide"), true));
+            
+            // dossierStatus != CLOTURE
+            predicates.add(cb.notEqual(root.get("dossierStatus"), DossierStatus.CLOTURE));
+            
+            // Recherche optionnelle
+            if (search != null && !search.trim().isEmpty()) {
+                String searchPattern = "%" + search.toLowerCase() + "%";
+                Predicate searchPredicate = cb.or(
+                    cb.like(cb.lower(root.get("numeroDossier")), searchPattern),
+                    cb.like(cb.lower(root.get("titre")), searchPattern),
+                    cb.like(cb.lower(root.get("description")), searchPattern)
+                );
+                predicates.add(searchPredicate);
+            }
+            
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        
+        // Exécuter la requête avec pagination
+        Page<Dossier> dossierPage = dossierRepository.findAll(spec, pageable);
+        
+        // Construire la réponse
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("content", dossierPage.getContent());
+        response.put("totalElements", dossierPage.getTotalElements());
+        response.put("totalPages", dossierPage.getTotalPages());
+        response.put("currentPage", dossierPage.getNumber());
+        response.put("size", dossierPage.getSize());
+        response.put("numberOfElements", dossierPage.getNumberOfElements());
+        response.put("first", dossierPage.isFirst());
+        response.put("last", dossierPage.isLast());
+        
+        return response;
     }
 
     // ==================== Méthodes utilitaires ====================

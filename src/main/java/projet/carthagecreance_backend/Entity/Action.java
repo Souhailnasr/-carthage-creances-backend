@@ -20,7 +20,7 @@ public class Action implements Serializable {
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    private TypeAction type;  // Exemple: RELANCE, SAISIE, MISE_EN_DEMEURE
+    private TypeAction type;
     @Enumerated(EnumType.STRING)
     private ReponseDebiteur  reponseDebiteur;
     private LocalDate dateAction;

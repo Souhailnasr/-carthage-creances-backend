@@ -8,7 +8,10 @@ import org.springframework.stereotype.Repository;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.DossierStatus;
 import projet.carthagecreance_backend.Entity.Statut;
+import projet.carthagecreance_backend.Entity.TypeRecouvrement;
 import projet.carthagecreance_backend.Entity.Urgence;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.Date;
 import java.util.List;
@@ -148,4 +151,24 @@ public interface DossierRepository extends JpaRepository<Dossier, Long>, JpaSpec
     // Compter par agent créateur
     @Query("SELECT COUNT(d) FROM Dossier d WHERE d.agentCreateur.id = :agentId")
     long countByAgentCreateurId(@Param("agentId") Long agentId);
+    
+    // ==================== Méthodes pour le type de recouvrement ====================
+    
+    // Rechercher par type de recouvrement avec pagination
+    Page<Dossier> findByTypeRecouvrement(TypeRecouvrement typeRecouvrement, Pageable pageable);
+    
+    // Rechercher par type de recouvrement, validé et en cours
+    @Query("SELECT d FROM Dossier d WHERE d.typeRecouvrement = :typeRecouvrement " +
+           "AND d.valide = true AND d.dossierStatus = :dossierStatus AND d.dateCloture IS NULL")
+    Page<Dossier> findByTypeRecouvrementAndValideAndDossierStatus(
+        @Param("typeRecouvrement") TypeRecouvrement typeRecouvrement,
+        @Param("dossierStatus") DossierStatus dossierStatus,
+        Pageable pageable
+    );
+    
+    // Rechercher par type de recouvrement (liste simple)
+    List<Dossier> findByTypeRecouvrement(TypeRecouvrement typeRecouvrement);
+    
+    // Compter par type de recouvrement
+    long countByTypeRecouvrement(TypeRecouvrement typeRecouvrement);
 }
