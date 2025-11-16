@@ -1,16 +1,21 @@
 package projet.carthagecreance_backend.Controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import projet.carthagecreance_backend.DTO.ActionRequestDTO;
 import projet.carthagecreance_backend.Entity.Action;
 import projet.carthagecreance_backend.Entity.TypeAction;
 import projet.carthagecreance_backend.Entity.ReponseDebiteur;
 import projet.carthagecreance_backend.Service.ActionService;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -18,17 +23,41 @@ import java.util.Optional;
 @CrossOrigin(origins = "*")
 public class ActionController {
 
+    private static final Logger logger = LoggerFactory.getLogger(ActionController.class);
+
     @Autowired
     private ActionService actionService;
 
     // CRUD Operations
     @PostMapping
-    public ResponseEntity<Action> createAction(@RequestBody Action action) {
+    public ResponseEntity<?> createAction(@RequestBody ActionRequestDTO actionDTO) {
         try {
-            Action createdAction = actionService.createAction(action);
+            logger.info("Tentative de création d'action pour le dossier ID: {}", actionDTO.getDossierId());
+            logger.debug("Données reçues: type={}, dateAction={}, nbOccurrences={}, coutUnitaire={}, reponseDebiteur={}", 
+                    actionDTO.getType(), actionDTO.getDateAction(), actionDTO.getNbOccurrences(), 
+                    actionDTO.getCoutUnitaire(), actionDTO.getReponseDebiteur());
+            
+            Action createdAction = actionService.createActionFromDTO(actionDTO);
+            logger.info("Action créée avec succès, ID: {}", createdAction.getId());
             return new ResponseEntity<>(createdAction, HttpStatus.CREATED);
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de la création d'action: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Erreur de validation");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la création d'action: {}", e.getMessage(), e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Erreur lors de la création");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            logger.error("Erreur inattendue lors de la création d'action", e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Erreur interne du serveur");
+            errorResponse.put("message", "Une erreur inattendue s'est produite");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -46,12 +75,24 @@ public class ActionController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Action> updateAction(@PathVariable Long id, @RequestBody Action action) {
+    public ResponseEntity<?> updateAction(@PathVariable Long id, @RequestBody ActionRequestDTO actionDTO) {
         try {
-            Action updatedAction = actionService.updateAction(id, action);
+            logger.info("Tentative de mise à jour de l'action ID: {}", id);
+            Action updatedAction = actionService.updateActionFromDTO(id, actionDTO);
+            logger.info("Action mise à jour avec succès, ID: {}", id);
             return new ResponseEntity<>(updatedAction, HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de la mise à jour d'action: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Erreur de validation");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
         } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            logger.error("Erreur lors de la mise à jour d'action: {}", e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Action non trouvée");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
         }
     }
 

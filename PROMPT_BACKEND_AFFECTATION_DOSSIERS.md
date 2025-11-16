@@ -349,3 +349,5 @@ Dans DossierServiceImpl.java, implémentez la méthode pour filtrer les dossiers
 - [ ] Les transactions sont gérées avec @Transactional
 
 
+
+

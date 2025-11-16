@@ -1,5 +1,6 @@
 package projet.carthagecreance_backend.Service;
 
+import projet.carthagecreance_backend.DTO.ActionRequestDTO;
 import projet.carthagecreance_backend.Entity.Action;
 import projet.carthagecreance_backend.Entity.TypeAction;
 import projet.carthagecreance_backend.Entity.ReponseDebiteur;
@@ -12,9 +13,11 @@ public interface ActionService {
     
     // CRUD Operations
     Action createAction(Action action);
+    Action createActionFromDTO(ActionRequestDTO actionDTO); // Nouvelle méthode avec DTO
     Optional<Action> getActionById(Long id);
     List<Action> getAllActions();
     Action updateAction(Long id, Action action);
+    Action updateActionFromDTO(Long id, ActionRequestDTO actionDTO); // Nouvelle méthode avec DTO
     void deleteAction(Long id);
     
     // Search Operations
