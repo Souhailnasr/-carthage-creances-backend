@@ -727,6 +727,49 @@ public class DossierServiceImpl implements DossierService {
     
     @Override
     @Transactional
+    public Dossier affecterAvocatEtHuissier(Long dossierId, Long avocatId, Long huissierId) {
+        logger.info("Affectation d'avocat/huissier au dossier {}: avocatId={}, huissierId={}", dossierId, avocatId, huissierId);
+        
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Gérer l'affectation de l'avocat
+        if (avocatId != null) {
+            // Vérifier que l'avocat existe
+            Avocat avocat = avocatRepository.findById(avocatId)
+                    .orElseThrow(() -> new RuntimeException("Avocat non trouvé avec l'ID: " + avocatId));
+            dossier.setAvocat(avocat);
+            logger.info("Avocat {} affecté au dossier {}", avocatId, dossierId);
+        } else {
+            // Retirer l'affectation de l'avocat si null
+            dossier.setAvocat(null);
+            logger.info("Affectation de l'avocat retirée du dossier {}", dossierId);
+        }
+        
+        // Gérer l'affectation de l'huissier
+        if (huissierId != null) {
+            // Vérifier que l'huissier existe
+            Huissier huissier = huissierRepository.findById(huissierId)
+                    .orElseThrow(() -> new RuntimeException("Huissier non trouvé avec l'ID: " + huissierId));
+            dossier.setHuissier(huissier);
+            logger.info("Huissier {} affecté au dossier {}", huissierId, dossierId);
+        } else {
+            // Retirer l'affectation de l'huissier si null
+            dossier.setHuissier(null);
+            logger.info("Affectation de l'huissier retirée du dossier {}", dossierId);
+        }
+        
+        // Vérifier qu'au moins un des deux est affecté
+        if (avocatId == null && huissierId == null) {
+            logger.warn("Aucun avocat ni huissier n'a été affecté au dossier {}", dossierId);
+        }
+        
+        return dossierRepository.save(dossier);
+    }
+    
+    @Override
+    @Transactional
     public Dossier affecterAuRecouvrementAmiable(Long dossierId) {
         // Vérifier que le dossier existe
         Dossier dossier = dossierRepository.findById(dossierId)

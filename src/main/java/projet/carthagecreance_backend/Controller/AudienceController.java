@@ -7,28 +7,83 @@ import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.Entity.Audience;
 import projet.carthagecreance_backend.Entity.DecisionResult;
 import projet.carthagecreance_backend.Entity.TribunalType;
+import projet.carthagecreance_backend.DTO.AudienceRequestDTO;
 import projet.carthagecreance_backend.Service.AudienceService;
+import projet.carthagecreance_backend.Service.Impl.AudienceServiceImpl;
 
 import java.time.LocalDate;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/audiences")
 @CrossOrigin(origins = "*")
 public class AudienceController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AudienceController.class);
+
     @Autowired
     private AudienceService audienceService;
+    
+    @Autowired
+    private AudienceServiceImpl audienceServiceImpl;
 
     // CRUD Operations
+    /**
+     * Crée une nouvelle audience
+     * Accepte AudienceRequestDTO avec soit dossierId soit dossier: {id}
+     * 
+     * @param dto DTO contenant les données de l'audience
+     * @return L'audience créée avec toutes ses relations chargées
+     * 
+     * @example
+     * POST /api/audiences
+     * Body: {
+     *   "dateAudience": "2025-11-17",
+     *   "dossierId": 38,
+     *   "avocatId": 3
+     * }
+     * 
+     * OU
+     * 
+     * Body: {
+     *   "dateAudience": "2025-11-17",
+     *   "dossier": { "id": 38 },
+     *   "avocat": { "id": 3 }
+     * }
+     */
     @PostMapping
-    public ResponseEntity<Audience> createAudience(@RequestBody Audience audience) {
+    public ResponseEntity<?> createAudience(@RequestBody AudienceRequestDTO dto) {
         try {
-            Audience createdAudience = audienceService.createAudience(audience);
+            logger.info("📥 Requête de création d'audience reçue: {}", dto);
+            logger.info("📥 Dossier ID: {}, Avocat ID: {}, Huissier ID: {}", 
+                    dto.getDossierIdValue(), dto.getAvocatIdValue(), dto.getHuissierIdValue());
+            
+            Audience createdAudience = audienceServiceImpl.createAudienceFromDTO(dto);
+            
+            logger.info("✅ Audience créée avec succès, ID: {}, dossier_id: {}", 
+                    createdAudience.getId(), 
+                    createdAudience.getDossier() != null ? createdAudience.getDossier().getId() : "NULL");
+            
             return new ResponseEntity<>(createdAudience, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            logger.error("❌ Erreur lors de la création de l'audience: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Erreur lors de la création de l'audience",
+                    "message", e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            logger.error("❌ Erreur interne lors de la création de l'audience: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "error", "Erreur interne du serveur",
+                    "message", "Erreur lors de la création de l'audience: " + e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
         }
     }
 
@@ -46,12 +101,27 @@ public class AudienceController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Audience> updateAudience(@PathVariable Long id, @RequestBody Audience audience) {
+    public ResponseEntity<?> updateAudience(@PathVariable Long id, @RequestBody AudienceRequestDTO dto) {
         try {
-            Audience updatedAudience = audienceService.updateAudience(id, audience);
+            logger.info("📥 Mise à jour de l'audience {} avec DTO: {}", id, dto);
+            Audience updatedAudience = audienceServiceImpl.updateAudienceFromDTO(id, dto);
+            logger.info("✅ Audience mise à jour avec succès, dossier_id: {}", 
+                    updatedAudience.getDossier() != null ? updatedAudience.getDossier().getId() : "NULL");
             return new ResponseEntity<>(updatedAudience, HttpStatus.OK);
         } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            logger.error("❌ Erreur lors de la mise à jour: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Erreur lors de la mise à jour de l'audience",
+                    "message", e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("❌ Erreur interne lors de la mise à jour: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "error", "Erreur interne du serveur",
+                    "message", "Erreur lors de la mise à jour de l'audience: " + e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
         }
     }
 

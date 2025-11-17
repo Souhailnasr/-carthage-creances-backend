@@ -1,5 +1,6 @@
 package projet.carthagecreance_backend.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -40,6 +41,7 @@ public class Huissier implements Serializable {
 
 
     @OneToMany(mappedBy = "huissier")
+    @JsonIgnore // Évite la récursion infinie lors de la sérialisation JSON
     private List<Dossier> dossiers;
 }
 

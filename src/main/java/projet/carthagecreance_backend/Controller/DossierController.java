@@ -14,6 +14,7 @@ import projet.carthagecreance_backend.Entity.Statut;
 import io.jsonwebtoken.ExpiredJwtException;
 import projet.carthagecreance_backend.Service.DossierService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
+import projet.carthagecreance_backend.DTO.AffectationDossierDTO;
 import projet.carthagecreance_backend.Service.FileStorageService;
 import projet.carthagecreance_backend.SecurityServices.UserExtractionService;
 import projet.carthagecreance_backend.Entity.Utilisateur;
@@ -1233,6 +1234,51 @@ public class DossierController {
                     .body(Map.of(
                         "error", "Erreur interne du serveur",
                         "message", "Erreur lors de l'assignation de l'huissier: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+    
+    /**
+     * Affecte un dossier à un avocat et/ou un huissier de manière flexible
+     * Permet d'affecter soit un avocat, soit un huissier, soit les deux
+     * Si un ID est null dans le body, l'affectation correspondante sera retirée
+     * 
+     * @param id L'ID du dossier
+     * @param affectationDTO DTO contenant les IDs de l'avocat et/ou de l'huissier (optionnels)
+     * @return ResponseEntity avec le dossier mis à jour (200 OK) ou erreur (400 BAD_REQUEST)
+     * 
+     * @example
+     * PUT /api/dossiers/1/assign/avocat-huissier
+     * Body: {"avocatId": 3, "huissierId": 2}  // Affecter les deux
+     * Body: {"avocatId": 3}                    // Affecter uniquement l'avocat
+     * Body: {"huissierId": 2}                  // Affecter uniquement l'huissier
+     * Body: {"avocatId": null, "huissierId": 2} // Retirer l'avocat, affecter l'huissier
+     */
+    @PutMapping("/{id}/assign/avocat-huissier")
+    public ResponseEntity<?> affecterAvocatEtHuissier(
+            @PathVariable Long id,
+            @RequestBody AffectationDossierDTO affectationDTO) {
+        try {
+            Dossier updatedDossier = dossierService.affecterAvocatEtHuissier(
+                    id, 
+                    affectationDTO.getAvocatId(), 
+                    affectationDTO.getHuissierId()
+            );
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'affectation avocat/huissier: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'affectation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'affectation avocat/huissier: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'affectation avocat/huissier: " + e.getMessage(),
                         "timestamp", new Date().toString()
                     ));
         }

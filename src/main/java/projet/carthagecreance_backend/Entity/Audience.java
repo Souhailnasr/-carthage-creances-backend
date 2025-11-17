@@ -30,16 +30,17 @@ public class Audience implements Serializable {
     @Enumerated(EnumType.STRING)
     private DecisionResult resultat;
 
-    @ManyToOne
-    @JoinColumn(name = "dossier_id")
-    @JsonIgnore // Évite la récursion infinie
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dossier_id", nullable = false)
+    @JsonIgnore // Évite la récursion infinie lors de la sérialisation
     private Dossier dossier;
 
-    @ManyToOne
-    @JoinColumn(name = "avocat_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "avocat_id", nullable = true)
     private Avocat avocat;
-    @ManyToOne
-    @JoinColumn(name = "hussier_id")
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "hussier_id", nullable = true)
     private Huissier huissier;
 }
 

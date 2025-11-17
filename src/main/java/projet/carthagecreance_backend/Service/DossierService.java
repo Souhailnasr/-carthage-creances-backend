@@ -215,6 +215,18 @@ public interface DossierService {
     Dossier assignerHuissier(Long dossierId, Long huissierId);
     
     /**
+     * Affecte un dossier à un avocat et/ou un huissier de manière flexible
+     * Permet d'affecter soit un avocat, soit un huissier, soit les deux
+     * Si un ID est null, l'affectation correspondante sera retirée
+     * @param dossierId L'ID du dossier à affecter
+     * @param avocatId L'ID de l'avocat (optionnel, null pour retirer l'affectation)
+     * @param huissierId L'ID de l'huissier (optionnel, null pour retirer l'affectation)
+     * @return Le dossier mis à jour
+     * @throws RuntimeException si le dossier, l'avocat ou l'huissier n'existe pas
+     */
+    Dossier affecterAvocatEtHuissier(Long dossierId, Long avocatId, Long huissierId);
+    
+    /**
      * Affecte un dossier validé au chef du département recouvrement amiable
      * @param dossierId L'ID du dossier à affecter
      * @return Le dossier mis à jour avec le chef amiable assigné comme agentResponsable
