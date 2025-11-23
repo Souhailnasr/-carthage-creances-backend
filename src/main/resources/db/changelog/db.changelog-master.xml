@@ -6,5 +6,6 @@
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.3.xsd">
 
     <include file="db/changelog/V1.1__add_file_path_columns.xml" relativeToChangelogFile="true"/>
+    <include file="db/changelog/V1_2__create_finance_tables.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

@@ -365,4 +365,113 @@ public class NotificationController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    // ==================== ENDPOINTS AVANCÉS ====================
+
+    /**
+     * Envoie une notification à plusieurs utilisateurs (pour les chefs)
+     * 
+     * @param request Map contenant userIds, type, titre, message, entiteId, entiteType
+     * @return ResponseEntity avec le nombre de notifications créées (200 OK)
+     */
+    @PostMapping("/envoyer-multiples")
+    public ResponseEntity<java.util.Map<String, Object>> envoyerNotificationMultiples(@RequestBody java.util.Map<String, Object> request) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<Long> userIds = (List<Long>) request.get("userIds");
+            String typeStr = (String) request.get("type");
+            String titre = (String) request.get("titre");
+            String message = (String) request.get("message");
+            Long entiteId = request.get("entiteId") != null ? Long.valueOf(request.get("entiteId").toString()) : null;
+            String entiteTypeStr = (String) request.get("entiteType");
+            
+            projet.carthagecreance_backend.Entity.TypeNotification type = 
+                projet.carthagecreance_backend.Entity.TypeNotification.valueOf(typeStr);
+            projet.carthagecreance_backend.Entity.TypeEntite entiteType = 
+                entiteTypeStr != null ? projet.carthagecreance_backend.Entity.TypeEntite.valueOf(entiteTypeStr) : null;
+            
+            int count = notificationService.envoyerNotificationAMultiplesUtilisateurs(
+                userIds, type, titre, message, entiteId, entiteType);
+            
+            return ResponseEntity.ok(java.util.Map.of("count", count));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Envoie une notification à tous les agents d'un chef
+     * 
+     * @param chefId L'ID du chef
+     * @param request Map contenant type, titre, message, entiteId, entiteType
+     * @return ResponseEntity avec le nombre de notifications créées (200 OK)
+     */
+    @PostMapping("/chef/{chefId}/agents")
+    public ResponseEntity<java.util.Map<String, Object>> envoyerNotificationAAgentsChef(
+            @PathVariable Long chefId, @RequestBody java.util.Map<String, Object> request) {
+        try {
+            String typeStr = (String) request.get("type");
+            String titre = (String) request.get("titre");
+            String message = (String) request.get("message");
+            Long entiteId = request.get("entiteId") != null ? Long.valueOf(request.get("entiteId").toString()) : null;
+            String entiteTypeStr = (String) request.get("entiteType");
+            
+            projet.carthagecreance_backend.Entity.TypeNotification type = 
+                projet.carthagecreance_backend.Entity.TypeNotification.valueOf(typeStr);
+            projet.carthagecreance_backend.Entity.TypeEntite entiteType = 
+                entiteTypeStr != null ? projet.carthagecreance_backend.Entity.TypeEntite.valueOf(entiteTypeStr) : null;
+            
+            int count = notificationService.envoyerNotificationAAgentsChef(
+                chefId, type, titre, message, entiteId, entiteType);
+            
+            return ResponseEntity.ok(java.util.Map.of("count", count));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Envoie une notification à tous les utilisateurs (pour le super admin)
+     * 
+     * @param request Map contenant type, titre, message, entiteId, entiteType
+     * @return ResponseEntity avec le nombre de notifications créées (200 OK)
+     */
+    @PostMapping("/envoyer-tous")
+    public ResponseEntity<java.util.Map<String, Object>> envoyerNotificationATous(@RequestBody java.util.Map<String, Object> request) {
+        try {
+            String typeStr = (String) request.get("type");
+            String titre = (String) request.get("titre");
+            String message = (String) request.get("message");
+            Long entiteId = request.get("entiteId") != null ? Long.valueOf(request.get("entiteId").toString()) : null;
+            String entiteTypeStr = (String) request.get("entiteType");
+            
+            projet.carthagecreance_backend.Entity.TypeNotification type = 
+                projet.carthagecreance_backend.Entity.TypeNotification.valueOf(typeStr);
+            projet.carthagecreance_backend.Entity.TypeEntite entiteType = 
+                entiteTypeStr != null ? projet.carthagecreance_backend.Entity.TypeEntite.valueOf(entiteTypeStr) : null;
+            
+            int count = notificationService.envoyerNotificationATousUtilisateurs(
+                type, titre, message, entiteId, entiteType);
+            
+            return ResponseEntity.ok(java.util.Map.of("count", count));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    /**
+     * Compte les notifications non lues par utilisateur (endpoint simplifié)
+     * 
+     * @param userId L'ID de l'utilisateur
+     * @return ResponseEntity avec le nombre de notifications non lues (200 OK)
+     */
+    @GetMapping("/user/{userId}/count/non-lues")
+    public ResponseEntity<Long> getNombreNotificationsNonLues(@PathVariable Long userId) {
+        try {
+            long count = notificationService.countNotificationsNonLuesByUser(userId);
+            return ResponseEntity.ok(count);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 }

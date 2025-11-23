@@ -683,3 +683,5 @@ this.audienceService.updateAudience(audienceId, audienceRequest).subscribe(...);
 
 **Ces prompts vous permettront d'adapter complètement le frontend aux changements backend ! 🚀**
 
+
+

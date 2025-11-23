@@ -38,11 +38,29 @@ public class AudienceServiceImpl implements AudienceService {
     
     @Autowired
     private HuissierRepository huissierRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 
     @Override
     @Transactional
     public Audience createAudience(Audience audience) {
-        return audienceRepository.save(audience);
+        Audience savedAudience = audienceRepository.save(audience);
+        
+        // Notification automatique de création d'audience
+        try {
+            if (savedAudience.getDossier() != null) {
+                automaticNotificationService.notifierCreationAudience(savedAudience, savedAudience.getDossier());
+                // Vérifier si c'est une audience prochaine
+                if (savedAudience.getDateProchaine() != null) {
+                    automaticNotificationService.notifierAudienceProchaine(savedAudience, savedAudience.getDossier());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la notification automatique de création d'audience: {}", e.getMessage());
+        }
+        
+        return savedAudience;
     }
     
     /**
@@ -98,6 +116,19 @@ public class AudienceServiceImpl implements AudienceService {
         logger.info("Audience créée avec succès, ID: {}, dossier_id: {}", 
                 savedAudience.getId(), 
                 savedAudience.getDossier() != null ? savedAudience.getDossier().getId() : "NULL");
+        
+        // Notification automatique de création d'audience
+        try {
+            if (savedAudience.getDossier() != null) {
+                automaticNotificationService.notifierCreationAudience(savedAudience, savedAudience.getDossier());
+                // Vérifier si c'est une audience prochaine
+                if (savedAudience.getDateProchaine() != null) {
+                    automaticNotificationService.notifierAudienceProchaine(savedAudience, savedAudience.getDossier());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la notification automatique de création d'audience: {}", e.getMessage());
+        }
         
         return savedAudience;
     }

@@ -138,6 +138,10 @@ public interface DossierRepository extends JpaRepository<Dossier, Long>, JpaSpec
     @Query("SELECT d FROM Dossier d WHERE d.agentCreateur.id = :agentId")
     List<Dossier> findByAgentCreateurId(@Param("agentId") Long agentId);
     
+    // Rechercher par agent responsable
+    @Query("SELECT d FROM Dossier d WHERE d.agentResponsable.id = :agentId")
+    List<Dossier> findByAgentResponsableId(@Param("agentId") Long agentId);
+    
     // Compter par statut de dossier
     long countByDossierStatus(DossierStatus dossierStatus);
     

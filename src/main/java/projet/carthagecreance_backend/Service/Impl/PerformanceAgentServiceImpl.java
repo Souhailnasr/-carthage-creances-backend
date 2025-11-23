@@ -37,8 +37,14 @@ public class PerformanceAgentServiceImpl implements PerformanceAgentService {
     @Autowired
     private EnquetteRepository enquetteRepository;
 
-    // @Autowired
-    // private TacheUrgenteRepository tacheUrgenteRepository;
+    @Autowired
+    private projet.carthagecreance_backend.Repository.TacheUrgenteRepository tacheUrgenteRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.ActionRepository actionRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.AudienceRepository audienceRepository;
 
     /**
      * Crée une nouvelle performance d'agent
@@ -443,51 +449,93 @@ public class PerformanceAgentServiceImpl implements PerformanceAgentService {
      * @param periode La période
      */
     private void calculerStatistiquesAgent(PerformanceAgent performance, Long agentId, String periode) {
-        // Calculer les dossiers traités
-        List<Dossier> dossiersTraites = dossierRepository.findAll(); // À adapter selon votre logique métier
-        performance.setDossiersTraites(dossiersTraites.size());
+        // Calculer les dossiers traités par l'agent (créés ou assignés)
+        List<Dossier> dossiersCrees = dossierRepository.findByAgentCreateurId(agentId);
+        List<Dossier> dossiersAssignes = dossierRepository.findByAgentResponsableId(agentId);
+        
+        // Combiner les dossiers uniques
+        java.util.Set<Long> dossierIds = new java.util.HashSet<>();
+        dossiersCrees.forEach(d -> dossierIds.add(d.getId()));
+        dossiersAssignes.forEach(d -> dossierIds.add(d.getId()));
+        
+        performance.setDossiersTraites(dossierIds.size());
         
         // Calculer les dossiers validés
-        long dossiersValides = dossiersTraites.stream()
-                .filter(d -> d.getStatut() ==Statut.VALIDE )
-                .count();
+        long dossiersValides = dossierIds.stream()
+                .mapToLong(id -> {
+                    Dossier d = dossierRepository.findById(id).orElse(null);
+                    return (d != null && d.getStatut() == Statut.VALIDE) ? 1 : 0;
+                })
+                .sum();
         performance.setDossiersValides((int) dossiersValides);
         
-        // Calculer les enquêtes complétées
-        List<Enquette> enquetes = enquetteRepository.findAll(); // À adapter selon votre logique métier
-        performance.setEnquetesCompletees(enquetes.size());
+        // Calculer les enquêtes complétées par l'agent
+        List<Enquette> toutesEnquetes = enquetteRepository.findAll();
+        java.util.Set<Long> enqueteIds = new java.util.HashSet<>();
+        for (Enquette e : toutesEnquetes) {
+            if ((e.getAgentCreateur() != null && e.getAgentCreateur().getId().equals(agentId)) ||
+                (e.getAgentResponsable() != null && e.getAgentResponsable().getId().equals(agentId))) {
+                enqueteIds.add(e.getId());
+            }
+        }
+        performance.setEnquetesCompletees(enqueteIds.size());
         
         // Calculer les tâches urgentes complétées
-        // List<TacheUrgente> tachesUrgentes = tacheUrgenteRepository.findByAgentAssignéId(agentId);
-        // long tachesCompletees = tachesUrgentes.stream()
-        //         .filter(t -> t.getStatut() == StatutTache.TERMINEE)
-        //         .count();
-        
-        // Utiliser tachesCompletees dans le calcul du score si nécessaire
-        // performance.setTachesCompletees((int) tachesCompletees);
+        List<projet.carthagecreance_backend.Entity.TacheUrgente> tachesUrgentes = tacheUrgenteRepository.findByAgentAssignéId(agentId);
+        long tachesCompletees = tachesUrgentes.stream()
+                .filter(t -> t.getStatut() == projet.carthagecreance_backend.Entity.StatutTache.TERMINEE)
+                .count();
         
         // Mettre à jour la date de calcul
         performance.setDateCalcul(LocalDateTime.now());
     }
 
     /**
-     * Calcule le score d'une performance
+     * Calcule le score d'une performance basé sur toutes les entités
      * @param performance La performance à mettre à jour
      */
     private void calculerScore(PerformanceAgent performance) {
         double score = 0.0;
+        Long agentId = performance.getAgent().getId();
         
-        // Score basé sur les dossiers validés (40% du score total)
+        // Score basé sur les dossiers validés (30% du score total)
         if (performance.getDossiersTraites() > 0) {
             double tauxDossiersValides = (double) performance.getDossiersValides() / performance.getDossiersTraites();
-            score += tauxDossiersValides * 40;
+            score += tauxDossiersValides * 30;
         }
         
-        // Score basé sur les enquêtes complétées (30% du score total)
-        score += Math.min(performance.getEnquetesCompletees() * 2, 30);
+        // Score basé sur les enquêtes complétées (20% du score total)
+        score += Math.min(performance.getEnquetesCompletees() * 1.5, 20);
         
-        // Score basé sur les tâches urgentes (30% du score total)
-        // À adapter selon votre logique métier
+        // Score basé sur les tâches complétées (20% du score total)
+        List<projet.carthagecreance_backend.Entity.TacheUrgente> taches = tacheUrgenteRepository.findByAgentAssignéId(agentId);
+        long tachesTotal = taches.size();
+        long tachesCompletees = taches.stream()
+                .filter(t -> t.getStatut() == projet.carthagecreance_backend.Entity.StatutTache.TERMINEE)
+                .count();
+        if (tachesTotal > 0) {
+            double tauxTachesCompletees = (double) tachesCompletees / tachesTotal;
+            score += tauxTachesCompletees * 20;
+        }
+        
+        // Score basé sur les actions amiables (15% du score total)
+        List<projet.carthagecreance_backend.Entity.Dossier> dossiersAgent = dossierRepository.findByAgentResponsableId(agentId);
+        long actionsTotal = 0;
+        for (Dossier d : dossiersAgent) {
+            if (d.getActions() != null) {
+                actionsTotal += d.getActions().size();
+            }
+        }
+        score += Math.min(actionsTotal * 0.5, 15);
+        
+        // Score basé sur les audiences gérées (15% du score total)
+        long audiencesTotal = 0;
+        for (Dossier d : dossiersAgent) {
+            if (d.getAudiences() != null) {
+                audiencesTotal += d.getAudiences().size();
+            }
+        }
+        score += Math.min(audiencesTotal * 0.5, 15);
         
         performance.setScore(Math.min(score, 100.0)); // Score maximum de 100
     }

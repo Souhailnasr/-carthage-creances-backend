@@ -35,6 +35,9 @@ public class ActionServiceImpl implements ActionService {
     
     @Autowired
     private DossierRepository dossierRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 
     /**
      * Crée une action à partir d'un DTO
@@ -136,6 +139,16 @@ public class ActionServiceImpl implements ActionService {
         // Sauvegarder l'action
         Action savedAction = actionRepository.save(action);
         logger.info("Action créée avec succès, ID: {}, Dossier ID: {}", savedAction.getId(), dossier.getId());
+        
+        // Notification automatique pour les actions amiables
+        try {
+            if (dossier.getTypeRecouvrement() == TypeRecouvrement.AMIABLE) {
+                automaticNotificationService.notifierCreationActionAmiable(savedAction, dossier);
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la notification automatique de création d'action: {}", e.getMessage());
+        }
+        
         return savedAction;
     }
 
@@ -263,7 +276,18 @@ public class ActionServiceImpl implements ActionService {
         financeRepository.save(finance);
         
         // Sauvegarder l'action
-        return actionRepository.save(action);
+        Action savedAction = actionRepository.save(action);
+        
+        // Notification automatique pour les actions amiables
+        try {
+            if (dossier.getTypeRecouvrement() == TypeRecouvrement.AMIABLE) {
+                automaticNotificationService.notifierCreationActionAmiable(savedAction, dossier);
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la notification automatique de création d'action: {}", e.getMessage());
+        }
+        
+        return savedAction;
     }
 
     @Override

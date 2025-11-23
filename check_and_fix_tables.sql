@@ -41,3 +41,9 @@ DESCRIBE debiteur;
 
 
 
+
+
+
+
+
+

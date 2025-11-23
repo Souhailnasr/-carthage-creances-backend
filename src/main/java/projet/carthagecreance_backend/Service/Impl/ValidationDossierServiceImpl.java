@@ -36,6 +36,9 @@ public class ValidationDossierServiceImpl implements ValidationDossierService {
 
     @Autowired
     private NotificationService notificationService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 
     /**
      * Crée une nouvelle validation de dossier
@@ -236,13 +239,27 @@ public class ValidationDossierServiceImpl implements ValidationDossierService {
         // Ici, on pourrait mettre à jour le statut du dossier selon la logique métier
         // Par exemple, passer le dossier en "VALIDÉ" ou "APPROUVÉ"
         
-        // Envoyer une notification à l'agent créateur
+        // Mettre à jour le dossier
+        dossier.setValide(true);
+        dossier.setDateValidation(LocalDateTime.now());
+        dossier.setStatut(projet.carthagecreance_backend.Entity.Statut.VALIDE);
+        dossier.setCommentaireValidation(commentaire);
+        dossierService.updateDossier(dossierId, dossier);
+        
+        // Envoyer une notification à l'agent créateur (méthode de compatibilité)
         notificationService.envoyerNotificationValidation(
             validation.getAgentCreateur(),
             dossier.getNumeroDossier(),
             "VALIDÉ",
             commentaire
         );
+        
+        // Notification automatique de validation de dossier
+        try {
+            automaticNotificationService.notifierValidationDossier(dossier, chef);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la notification automatique de validation de dossier: " + e.getMessage());
+        }
         
         return validationDossierRepository.save(validation);
     }
@@ -284,16 +301,32 @@ public class ValidationDossierServiceImpl implements ValidationDossierService {
         validation.setDateValidation(LocalDateTime.now());
         validation.setCommentaires(commentaire);
         
-        // Envoyer une notification à l'agent créateur
+        // Mettre à jour le dossier
         Dossier dossier = dossierService.getDossierById(dossierId)
                 .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
         
+        dossier.setValide(false);
+        dossier.setDateValidation(LocalDateTime.now());
+        dossier.setStatut(projet.carthagecreance_backend.Entity.Statut.REJETE);
+        dossier.setCommentaireValidation(commentaire);
+        dossierService.updateDossier(dossierId, dossier);
+        
+        // Envoyer une notification à l'agent créateur (méthode de compatibilité)
         notificationService.envoyerNotificationValidation(
             validation.getAgentCreateur(),
             dossier.getNumeroDossier(),
             "REJETÉ",
             commentaire
         );
+        
+        // Notification automatique de rejet de dossier (via le service automatique)
+        try {
+            // Le service automatique gère aussi les rejets via notifierValidationDossier
+            // mais on peut aussi créer une notification spécifique
+            automaticNotificationService.notifierValidationDossier(dossier, chef);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la notification automatique de rejet de dossier: " + e.getMessage());
+        }
         
         return validationDossierRepository.save(validation);
     }

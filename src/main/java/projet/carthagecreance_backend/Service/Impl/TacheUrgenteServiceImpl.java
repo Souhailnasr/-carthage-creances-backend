@@ -27,6 +27,9 @@ public class TacheUrgenteServiceImpl implements TacheUrgenteService {
 
     @Autowired
     private UtilisateurRepository utilisateurRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 
     /**
      * Crée une nouvelle tâche urgente
@@ -64,7 +67,17 @@ public class TacheUrgenteServiceImpl implements TacheUrgenteService {
             throw new RuntimeException("La date d'échéance doit être dans le futur");
         }
         
-        return tacheUrgenteRepository.save(tache);
+        TacheUrgente savedTache = tacheUrgenteRepository.save(tache);
+        
+        // Notification automatique de création de tâche
+        try {
+            automaticNotificationService.notifierCreationTache(savedTache);
+        } catch (Exception e) {
+            // Logger l'erreur mais ne pas faire échouer la création
+            System.err.println("Erreur lors de la notification automatique de création de tâche: " + e.getMessage());
+        }
+        
+        return savedTache;
     }
 
     /**
@@ -242,7 +255,17 @@ public class TacheUrgenteServiceImpl implements TacheUrgenteService {
         tache.setDateCompletion(LocalDateTime.now());
         tache.setCommentaires(commentaire);
         
-        return tacheUrgenteRepository.save(tache);
+        TacheUrgente savedTache = tacheUrgenteRepository.save(tache);
+        
+        // Notification automatique de complétion de tâche
+        try {
+            automaticNotificationService.notifierCompletionTache(savedTache);
+        } catch (Exception e) {
+            // Logger l'erreur mais ne pas faire échouer la complétion
+            System.err.println("Erreur lors de la notification automatique de complétion de tâche: " + e.getMessage());
+        }
+        
+        return savedTache;
     }
 
     /**

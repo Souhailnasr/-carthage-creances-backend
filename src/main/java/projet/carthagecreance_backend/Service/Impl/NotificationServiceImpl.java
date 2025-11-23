@@ -389,6 +389,109 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     /**
+     * Envoie une notification à plusieurs utilisateurs (pour les chefs)
+     * @param userIds Liste des IDs des utilisateurs destinataires
+     * @param type Le type de notification
+     * @param titre Le titre de la notification
+     * @param message Le message de la notification
+     * @param entiteId L'ID de l'entité concernée (optionnel)
+     * @param entiteType Le type d'entité (optionnel)
+     * @return Nombre de notifications créées
+     */
+    @Override
+    public int envoyerNotificationAMultiplesUtilisateurs(List<Long> userIds, TypeNotification type, String titre, 
+                                                         String message, Long entiteId, TypeEntite entiteType) {
+        int count = 0;
+        for (Long userId : userIds) {
+            try {
+                creerNotificationAutomatique(userId, type, titre, message, entiteId, entiteType, null);
+                count++;
+            } catch (Exception e) {
+                // Logger l'erreur mais continuer avec les autres utilisateurs
+                System.err.println("Erreur lors de l'envoi de notification à l'utilisateur " + userId + ": " + e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Envoie une notification à tous les agents d'un chef
+     * @param chefId L'ID du chef
+     * @param type Le type de notification
+     * @param titre Le titre de la notification
+     * @param message Le message de la notification
+     * @param entiteId L'ID de l'entité concernée (optionnel)
+     * @param entiteType Le type d'entité (optionnel)
+     * @return Nombre de notifications créées
+     */
+    @Override
+    public int envoyerNotificationAAgentsChef(Long chefId, TypeNotification type, String titre, 
+                                                String message, Long entiteId, TypeEntite entiteType) {
+        Utilisateur chef = utilisateurRepository.findById(chefId)
+                .orElseThrow(() -> new RuntimeException("Chef non trouvé avec l'ID: " + chefId));
+        
+        // Récupérer les agents selon le rôle du chef
+        List<Utilisateur> agents = getAgentsByChefRole(chef.getRoleUtilisateur());
+        
+        int count = 0;
+        for (Utilisateur agent : agents) {
+            try {
+                creerNotificationAutomatique(agent.getId(), type, titre, message, entiteId, entiteType, null);
+                count++;
+            } catch (Exception e) {
+                System.err.println("Erreur lors de l'envoi de notification à l'agent " + agent.getId() + ": " + e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Envoie une notification à tous les utilisateurs (pour le super admin)
+     * @param type Le type de notification
+     * @param titre Le titre de la notification
+     * @param message Le message de la notification
+     * @param entiteId L'ID de l'entité concernée (optionnel)
+     * @param entiteType Le type d'entité (optionnel)
+     * @return Nombre de notifications créées
+     */
+    @Override
+    public int envoyerNotificationATousUtilisateurs(TypeNotification type, String titre, 
+                                                     String message, Long entiteId, TypeEntite entiteType) {
+        List<Utilisateur> tousUtilisateurs = utilisateurRepository.findAll();
+        
+        int count = 0;
+        for (Utilisateur utilisateur : tousUtilisateurs) {
+            try {
+                creerNotificationAutomatique(utilisateur.getId(), type, titre, message, entiteId, entiteType, null);
+                count++;
+            } catch (Exception e) {
+                System.err.println("Erreur lors de l'envoi de notification à l'utilisateur " + utilisateur.getId() + ": " + e.getMessage());
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Récupère les agents selon le rôle du chef
+     * @param roleChef Le rôle du chef
+     * @return Liste des agents correspondants
+     */
+    private List<Utilisateur> getAgentsByChefRole(projet.carthagecreance_backend.Entity.RoleUtilisateur roleChef) {
+        switch (roleChef) {
+            case CHEF_DEPARTEMENT_DOSSIER:
+                return utilisateurRepository.findByRoleUtilisateur(projet.carthagecreance_backend.Entity.RoleUtilisateur.AGENT_DOSSIER);
+            case CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE:
+                return utilisateurRepository.findByRoleUtilisateur(projet.carthagecreance_backend.Entity.RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
+            case CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE:
+                return utilisateurRepository.findByRoleUtilisateur(projet.carthagecreance_backend.Entity.RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
+            case CHEF_DEPARTEMENT_FINANCE:
+                return utilisateurRepository.findByRoleUtilisateur(projet.carthagecreance_backend.Entity.RoleUtilisateur.AGENT_FINANCE);
+            default:
+                return java.util.Collections.emptyList();
+        }
+    }
+
+    /**
      * Valide les données d'une notification
      * @param notification La notification à valider
      * @throws RuntimeException si les données sont invalides

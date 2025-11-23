@@ -183,4 +183,42 @@ public interface NotificationService {
      * @param commentaire Le commentaire de validation
      */
     void envoyerNotificationValidation(Long utilisateurId, String numeroDossier, String statut, String commentaire);
+
+    /**
+     * Envoie une notification à plusieurs utilisateurs (pour les chefs)
+     * @param userIds Liste des IDs des utilisateurs destinataires
+     * @param type Le type de notification
+     * @param titre Le titre de la notification
+     * @param message Le message de la notification
+     * @param entiteId L'ID de l'entité concernée (optionnel)
+     * @param entiteType Le type d'entité (optionnel)
+     * @return Nombre de notifications créées
+     */
+    int envoyerNotificationAMultiplesUtilisateurs(List<Long> userIds, TypeNotification type, String titre, 
+                                                   String message, Long entiteId, TypeEntite entiteType);
+
+    /**
+     * Envoie une notification à tous les agents d'un chef
+     * @param chefId L'ID du chef
+     * @param type Le type de notification
+     * @param titre Le titre de la notification
+     * @param message Le message de la notification
+     * @param entiteId L'ID de l'entité concernée (optionnel)
+     * @param entiteType Le type d'entité (optionnel)
+     * @return Nombre de notifications créées
+     */
+    int envoyerNotificationAAgentsChef(Long chefId, TypeNotification type, String titre, 
+                                        String message, Long entiteId, TypeEntite entiteType);
+
+    /**
+     * Envoie une notification à tous les utilisateurs (pour le super admin)
+     * @param type Le type de notification
+     * @param titre Le titre de la notification
+     * @param message Le message de la notification
+     * @param entiteId L'ID de l'entité concernée (optionnel)
+     * @param entiteType Le type d'entité (optionnel)
+     * @return Nombre de notifications créées
+     */
+    int envoyerNotificationATousUtilisateurs(TypeNotification type, String titre, 
+                                              String message, Long entiteId, TypeEntite entiteType);
 }

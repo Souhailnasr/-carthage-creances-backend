@@ -5,5 +5,10 @@ public enum TypeTache {
     RELANCE,
     DOSSIER,
     AUDIENCE,
-    ACTION
+    ACTION,
+    ACTION_AMIABLE,
+    VALIDATION,
+    TRAITEMENT,
+    SUIVI,
+    RAPPEL
 }

@@ -73,6 +73,9 @@ public class DossierServiceImpl implements DossierService {
     
     @Autowired
     private FinanceRepository financeRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 
     /**
      * Crée un nouveau dossier avec workflow de validation
@@ -210,6 +213,13 @@ public class DossierServiceImpl implements DossierService {
                             .build();
                     notificationService.createNotification(notification);
                 }
+            }
+
+            // Notification automatique de création de dossier
+            try {
+                automaticNotificationService.notifierCreationDossier(savedDossier);
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la notification automatique de création de dossier: {}", e.getMessage());
             }
 
             return savedDossier;
@@ -688,7 +698,16 @@ public class DossierServiceImpl implements DossierService {
         // Assigner l'agent comme agent responsable
         dossier.setAgentResponsable(agent);
         
-        return dossierRepository.save(dossier);
+        Dossier savedDossier = dossierRepository.save(dossier);
+        
+        // Notification automatique d'affectation
+        try {
+            automaticNotificationService.notifierAffectationDossier(savedDossier, agent);
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la notification automatique d'affectation de dossier: {}", e.getMessage());
+        }
+        
+        return savedDossier;
     }
 
     @Override
