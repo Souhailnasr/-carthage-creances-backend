@@ -19,7 +19,7 @@ import java.util.List;
  * @version 1.0
  */
 @RestController
-@RequestMapping("/api/notifications")
+@RequestMapping({"/api/notifications", "/notifications"})
 @CrossOrigin(origins = "http://localhost:4200")
 public class NotificationController {
 

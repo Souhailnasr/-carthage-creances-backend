@@ -567,4 +567,32 @@ public class UtilisateurController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    /**
+     * Obtenir les agents d'un chef
+     * GET /api/users/chef/{chefId}
+     *
+     * @param chefId L'ID du chef
+     * @return ResponseEntity avec la liste des agents du chef (200 OK) ou erreur (500 INTERNAL_SERVER_ERROR)
+     *
+     * @example
+     * GET /api/users/chef/46
+     */
+    @GetMapping("/chef/{chefId}")
+    public ResponseEntity<List<Utilisateur>> getAgentsByChef(@PathVariable Long chefId) {
+        try {
+            logger.info("Récupération des agents pour le chef ID: {}", chefId);
+            List<Utilisateur> agents = utilisateurService.getAgentsByChef(chefId);
+            logger.info("Nombre d'agents trouvés: {}", agents.size());
+            return ResponseEntity.ok(agents);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la récupération des agents du chef " + chefId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(null);
+        } catch (Exception e) {
+            logger.error("Erreur inattendue lors de la récupération des agents du chef " + chefId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(null);
+        }
+    }
 }

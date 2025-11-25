@@ -135,4 +135,12 @@ public interface UtilisateurService {
      * @return Liste des utilisateurs avec ce rôle
      */
     List<Utilisateur> getUtilisateursByRoleUtilisateur(RoleUtilisateur roleUtilisateur);
+
+    /**
+     * Récupère les agents d'un chef
+     * Pour le chef dossier, retourner uniquement les agents dossier
+     * @param chefId L'ID du chef
+     * @return Liste des agents du chef
+     */
+    List<Utilisateur> getAgentsByChef(Long chefId);
 }

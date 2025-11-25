@@ -32,6 +32,21 @@ public class Dossier implements Serializable {
     private String description;
     private String numeroDossier;
     private Double montantCreance;
+    
+    // Champs pour le recouvrement
+    @Column(name = "montant_total")
+    private Double montantTotal;
+    
+    @Column(name = "montant_recouvre")
+    @Builder.Default
+    private Double montantRecouvre = 0.0;
+    
+    @Column(name = "montant_restant")
+    private Double montantRestant;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "etat_dossier")
+    private EtatDossier etatDossier;
 
     // Dates
     @Column(nullable = false, updatable = false)

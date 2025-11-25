@@ -13,8 +13,11 @@ import projet.carthagecreance_backend.Entity.StatutValidation;
 import projet.carthagecreance_backend.Entity.Statut;
 import io.jsonwebtoken.ExpiredJwtException;
 import projet.carthagecreance_backend.Service.DossierService;
+import projet.carthagecreance_backend.Service.DossierMontantService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import projet.carthagecreance_backend.DTO.AffectationDossierDTO;
+import projet.carthagecreance_backend.DTO.MontantDossierDTO;
+import projet.carthagecreance_backend.DTO.ActionAmiableDTO;
 import projet.carthagecreance_backend.Service.FileStorageService;
 import projet.carthagecreance_backend.SecurityServices.UserExtractionService;
 import projet.carthagecreance_backend.Entity.Utilisateur;
@@ -63,6 +66,9 @@ public class DossierController {
     
     @Autowired
     private UserExtractionService userExtractionService;
+    
+    @Autowired
+    private DossierMontantService dossierMontantService;
 
     // Méthode utilitaire pour déterminer si un rôle est chef
     private boolean isChef(RoleUtilisateur role) {
@@ -1410,6 +1416,80 @@ public class DossierController {
                         "error", "Erreur interne du serveur",
                         "message", "Erreur lors de la récupération: " + e.getMessage()
                     ));
+        }
+    }
+
+    // ==================== NOUVEAUX ENDPOINTS POUR MONTANTS ====================
+    
+    /**
+     * Met à jour les montants d'un dossier
+     * @param id ID du dossier
+     * @param dto DTO contenant les montants et le mode de mise à jour
+     * @return Dossier mis à jour
+     */
+    @PutMapping("/{id}/montant")
+    public ResponseEntity<?> updateMontants(
+            @PathVariable Long id,
+            @RequestBody MontantDossierDTO dto) {
+        try {
+            Dossier updatedDossier = dossierMontantService.updateMontants(id, dto);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de la mise à jour des montants: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la mise à jour des montants: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de la mise à jour des montants: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur interne: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Enregistre une réponse amiable avec montant recouvré
+     * @param id ID du dossier
+     * @param dto DTO contenant le montant recouvré
+     * @return Dossier mis à jour
+     */
+    @PostMapping("/{id}/amiable")
+    public ResponseEntity<?> enregistrerActionAmiable(
+            @PathVariable Long id,
+            @RequestBody ActionAmiableDTO dto) {
+        try {
+            // Validation
+            if (dto.getMontantRecouvre() == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "montantRecouvre est requis"));
+            }
+            if (dto.getMontantRecouvre().compareTo(java.math.BigDecimal.ZERO) < 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "montantRecouvre ne peut pas être négatif"));
+            }
+            
+            // Mettre à jour le montant recouvré (mode ADD par défaut)
+            Dossier dossier = dossierMontantService.updateMontantRecouvreAmiable(
+                id, 
+                dto.getMontantRecouvre(), 
+                projet.carthagecreance_backend.Entity.ModeMiseAJour.ADD
+            );
+            
+            return new ResponseEntity<>(dossier, HttpStatus.OK);
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de l'enregistrement de l'action amiable: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'enregistrement de l'action amiable: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'enregistrement de l'action amiable: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur interne: " + e.getMessage()));
         }
     }
 }

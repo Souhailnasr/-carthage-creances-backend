@@ -73,7 +73,7 @@ public class DossierServiceImpl implements DossierService {
     
     @Autowired
     private FinanceRepository financeRepository;
-    
+
     @Autowired
     private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 

@@ -39,6 +39,9 @@ public interface UtilisateurRepository extends JpaRepository<Utilisateur, Long> 
 
     // >>>>>>>>> CORRECTION : Rechercher par rôle (utilisation de l'enum) <<<<<<<<<
     List<Utilisateur> findByRoleUtilisateur(RoleUtilisateur roleUtilisateur);
+    
+    // Rechercher par plusieurs rôles
+    List<Utilisateur> findByRoleUtilisateurIn(List<RoleUtilisateur> roles);
 
     // Rechercher les utilisateurs avec des dossiers
     @Query("SELECT u FROM Utilisateur u WHERE SIZE(u.dossiers) > 0")

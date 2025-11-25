@@ -3,6 +3,7 @@ package projet.carthagecreance_backend.Service.Impl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.Repository.*;
@@ -64,24 +65,31 @@ public class AutomaticNotificationServiceImpl implements AutomaticNotificationSe
     }
     
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void notifierAffectationDossier(Dossier dossier, Utilisateur agent) {
         if (dossier == null || agent == null) {
             return;
         }
         
-        String titre = "Dossier affecté";
-        String message = String.format("Le dossier %s vous a été affecté.", 
-                dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId());
-        
-        notificationService.creerNotificationAutomatique(
-            agent.getId(),
-            TypeNotification.DOSSIER_AFFECTE,
-            titre,
-            message,
-            dossier.getId(),
-            TypeEntite.DOSSIER,
-            "/dossiers/" + dossier.getId()
-        );
+        try {
+            String titre = "Dossier affecté";
+            String message = String.format("Le dossier %s vous a été affecté.", 
+                    dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId());
+            
+            notificationService.creerNotificationAutomatique(
+                agent.getId(),
+                TypeNotification.DOSSIER_AFFECTE,
+                titre,
+                message,
+                dossier.getId(),
+                TypeEntite.DOSSIER,
+                "/dossiers/" + dossier.getId()
+            );
+        } catch (Exception e) {
+            // Logger l'erreur mais ne pas la propager pour ne pas affecter la transaction principale
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification d'affectation de dossier: {}", e.getMessage(), e);
+        }
     }
     
     @Override

@@ -446,4 +446,49 @@ public class UtilisateurServiceImpl implements UtilisateurService {
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Aucun super admin trouvé"));
     }
+
+    /**
+     * Récupère les agents d'un chef
+     * Pour le chef dossier, retourner uniquement les agents dossier
+     */
+    @Override
+    public List<Utilisateur> getAgentsByChef(Long chefId) {
+        // Récupérer le chef
+        Utilisateur chef = utilisateurRepository.findById(chefId)
+                .orElseThrow(() -> new RuntimeException("Chef non trouvé avec l'ID: " + chefId));
+
+        // Déterminer le rôle du chef pour filtrer les agents appropriés
+        RoleUtilisateur chefRole = chef.getRoleUtilisateur();
+
+        List<Utilisateur> agents;
+
+        if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER) {
+            // Chef dossier : uniquement les agents dossier
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_DOSSIER);
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE) {
+            // Chef amiable : uniquement les agents amiable
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE) {
+            // Chef juridique : uniquement les agents juridique
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_FINANCE) {
+            // Chef finance : uniquement les agents finance
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_FINANCE);
+        } else if (chefRole == RoleUtilisateur.SUPER_ADMIN) {
+            // Pour SUPER_ADMIN, retourner tous les agents
+            agents = utilisateurRepository.findByRoleUtilisateurIn(
+                    java.util.Arrays.asList(
+                            RoleUtilisateur.AGENT_DOSSIER,
+                            RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE,
+                            RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE,
+                            RoleUtilisateur.AGENT_FINANCE
+                    )
+            );
+        } else {
+            // Pour les autres rôles, retourner une liste vide
+            agents = java.util.Collections.emptyList();
+        }
+
+        return agents;
+    }
 }

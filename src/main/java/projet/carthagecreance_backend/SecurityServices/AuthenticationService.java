@@ -19,7 +19,8 @@ import projet.carthagecreance_backend.PayloadResponse.AuthenticationResponse;
 import projet.carthagecreance_backend.Repository.TokenRepository;
 import projet.carthagecreance_backend.Repository.UtilisateurRepository;
 import projet.carthagecreance_backend.SecurityConfig.JwtService;
-import projet.carthagecreance_backend.Service.NotificationService;
+
+import java.time.LocalDateTime;
 
 
 @Service
@@ -34,7 +35,6 @@ public class AuthenticationService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final NotificationService notificationService;
 
     public AuthenticationResponse register(RegisterRequest request) {
 
@@ -77,17 +77,21 @@ public class AuthenticationService {
         logger.info("Utilisateur trouvé: ID={}, Nom={}, Email={}, Role={}", 
                    user.getId(), user.getNom(), user.getEmail(), user.getRoleUtilisateur());
         
-        var jwtToken = jwtService.generateToken(user);
-        revokeAllUserTokens(user);
-        saveUserToken(user, jwtToken);
+        user.setDerniereConnexion(LocalDateTime.now());
+        user.setDerniereDeconnexion(null);
+        var userWithAudit = repository.save(user);
+
+        var jwtToken = jwtService.generateToken(userWithAudit);
+        revokeAllUserTokens(userWithAudit);
+        saveUserToken(userWithAudit, jwtToken);
         
         AuthenticationResponse response = AuthenticationResponse.builder()
                 .token(jwtToken)
-                .userId(user.getId())
-                .email(user.getEmail())
-                .nom(user.getNom())
-                .prenom(user.getPrenom())
-                .role(user.getRoleUtilisateur().name())
+                .userId(userWithAudit.getId())
+                .email(userWithAudit.getEmail())
+                .nom(userWithAudit.getNom())
+                .prenom(userWithAudit.getPrenom())
+                .role(userWithAudit.getRoleUtilisateur().name())
                 .build();
         
         logger.info("Response générée: userId={}, email={}, nom={}, prenom={}, role={}", 
