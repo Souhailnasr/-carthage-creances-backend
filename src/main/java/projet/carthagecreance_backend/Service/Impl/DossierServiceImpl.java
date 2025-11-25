@@ -540,7 +540,9 @@ public class DossierServiceImpl implements DossierService {
 
     @Override
     public List<Dossier> getDossiersByAgent(Long agentId) {
-        return dossierRepository.findByUtilisateurId(agentId);
+        // Chercher les dossiers où l'agent est responsable (agent_responsable_id)
+        // OU les dossiers dans la table de jointure (dossier_utilisateurs)
+        return dossierRepository.findDossiersAffectesByAgent(agentId);
     }
 
     @Override

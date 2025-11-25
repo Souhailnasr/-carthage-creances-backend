@@ -44,9 +44,15 @@ public interface DossierRepository extends JpaRepository<Dossier, Long>, JpaSpec
     // Rechercher par débiteur
     List<Dossier> findByDebiteurId(Long debiteurId);
     
-    // Rechercher par utilisateur
+    // Rechercher par utilisateur (via table de jointure)
     @Query("SELECT d FROM Dossier d JOIN d.utilisateurs u WHERE u.id = :utilisateurId")
     List<Dossier> findByUtilisateurId(@Param("utilisateurId") Long utilisateurId);
+    
+    // Rechercher les dossiers affectés à un agent (agent responsable OU dans table de jointure)
+    @Query("SELECT DISTINCT d FROM Dossier d " +
+           "LEFT JOIN d.utilisateurs u " +
+           "WHERE (d.agentResponsable.id = :agentId OR u.id = :agentId)")
+    List<Dossier> findDossiersAffectesByAgent(@Param("agentId") Long agentId);
     
     // Rechercher par date de création
     List<Dossier> findByDateCreation(Date dateCreation);

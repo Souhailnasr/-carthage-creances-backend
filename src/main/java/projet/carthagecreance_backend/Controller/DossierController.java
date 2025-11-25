@@ -723,7 +723,81 @@ public class DossierController {
             List<Dossier> dossiers = dossierService.getDossiersByAgent(agentId);
             return new ResponseEntity<>(dossiers, HttpStatus.OK);
         } catch (Exception e) {
+            logger.error("Erreur lors de la récupération des dossiers de l'agent {}: {}", agentId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * Récupère les dossiers assignés à un agent avec pagination
+     * 
+     * @param agentId L'ID de l'agent
+     * @param page Numéro de page (défaut: 0)
+     * @param size Taille de la page (défaut: 10, max: 100)
+     * @param sort Champ de tri (défaut: "dateCreation")
+     * @return ResponseEntity avec la page des dossiers de l'agent (200 OK) ou erreur (400/500)
+     * 
+     * @example
+     * GET /api/dossiers/agent/1/paginated?page=0&size=10&sort=dateCreation
+     */
+    @GetMapping("/agent/{agentId}/paginated")
+    public ResponseEntity<?> getDossiersByAgentPaginated(
+            @PathVariable Long agentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "dateCreation") String sort) {
+        try {
+            // Validation des paramètres
+            if (page < 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Le numéro de page doit être >= 0"));
+            }
+            if (size <= 0 || size > 100) {
+                return ResponseEntity.badRequest().body(Map.of("error", "La taille de page doit être entre 1 et 100"));
+            }
+            
+            // Corriger la taille si elle dépasse 100
+            if (size > 100) {
+                size = 100;
+            }
+            
+            // Créer la pagination avec tri
+            Sort.Direction sortDirection = Sort.Direction.DESC;
+            Sort sortObj = Sort.by(sortDirection, sort);
+            Pageable pageable = PageRequest.of(page, size, sortObj);
+            
+            // Récupérer tous les dossiers de l'agent
+            List<Dossier> allDossiers = dossierService.getDossiersByAgent(agentId);
+            
+            // Paginer manuellement
+            int start = page * size;
+            int end = Math.min(start + size, allDossiers.size());
+            List<Dossier> pagedDossiers = start < allDossiers.size() 
+                ? allDossiers.subList(start, end) 
+                : List.of();
+            
+            // Calculer le nombre total de pages
+            int totalPages = (int) Math.ceil((double) allDossiers.size() / size);
+            
+            // Construire la réponse
+            Map<String, Object> result = Map.of(
+                "content", pagedDossiers,
+                "totalElements", allDossiers.size(),
+                "totalPages", totalPages,
+                "currentPage", page,
+                "size", size,
+                "first", page == 0,
+                "last", page >= totalPages - 1,
+                "numberOfElements", pagedDossiers.size()
+            );
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la récupération paginée des dossiers de l'agent {}: {}", agentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de la récupération: " + e.getMessage()
+                    ));
         }
     }
 
