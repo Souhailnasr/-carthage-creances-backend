@@ -69,6 +69,10 @@ public class LogoutService implements LogoutHandler {
 		user.setDerniereDeconnexion(now);
 		logger.info("Logout: Après setDerniereDeconnexion - valeur: {}", user.getDerniereDeconnexion());
 		
+		// Mettre à jour le statut actif : utilisateur déconnecté = inactif
+		user.mettreAJourStatutActif();
+		logger.info("Logout: Statut actif mis à jour: {}", user.getActif());
+		
 		// Utiliser saveAndFlush pour forcer l'écriture immédiate en base
 		Utilisateur savedUser = utilisateurRepository.saveAndFlush(user);
 		logger.info("Logout: Utilisateur sauvegardé (saveAndFlush) - ID: {}, derniere_deconnexion: {}", 

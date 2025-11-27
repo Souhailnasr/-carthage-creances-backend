@@ -360,6 +360,58 @@ public class UtilisateurController {
     }
 
     /**
+     * Met à jour le statut actif d'un utilisateur en fonction de ses dates de connexion/déconnexion
+     *
+     * @param userId L'ID de l'utilisateur
+     * @return ResponseEntity avec l'utilisateur mis à jour (200 OK)
+     *
+     * @example
+     * PUT /api/users/{userId}/statut-actif
+     */
+    @PutMapping("/{userId}/statut-actif")
+    public ResponseEntity<?> mettreAJourStatutActif(@PathVariable Long userId) {
+        try {
+            Utilisateur user = utilisateurService.mettreAJourStatutActif(userId);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Statut actif mis à jour",
+                    "userId", userId,
+                    "email", user.getEmail(),
+                    "actif", user.getActif(),
+                    "derniere_connexion", user.getDerniereConnexion() != null ? user.getDerniereConnexion().toString() : "NULL",
+                    "derniere_deconnexion", user.getDerniereDeconnexion() != null ? user.getDerniereDeconnexion().toString() : "NULL"
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Utilisateur non trouvé", "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de la mise à jour", "message", e.getMessage()));
+        }
+    }
+
+    /**
+     * Met à jour le statut actif de tous les utilisateurs
+     *
+     * @return ResponseEntity avec le nombre d'utilisateurs mis à jour (200 OK)
+     *
+     * @example
+     * PUT /api/users/statut-actif/tous
+     */
+    @PutMapping("/statut-actif/tous")
+    public ResponseEntity<?> mettreAJourStatutActifTous() {
+        try {
+            int count = utilisateurService.mettreAJourStatutActifTous();
+            return ResponseEntity.ok(Map.of(
+                    "message", "Statut actif mis à jour pour tous les utilisateurs",
+                    "nombreUtilisateursMisAJour", count
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de la mise à jour", "message", e.getMessage()));
+        }
+    }
+
+    /**
      * Récupère les performances des agents
      *
      * @return ResponseEntity avec la liste des performances des agents (200 OK)

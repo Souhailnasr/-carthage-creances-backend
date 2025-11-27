@@ -143,4 +143,18 @@ public interface UtilisateurService {
      * @return Liste des agents du chef
      */
     List<Utilisateur> getAgentsByChef(Long chefId);
+
+    /**
+     * Met à jour le statut actif d'un utilisateur en fonction de ses dates de connexion/déconnexion
+     * @param userId L'ID de l'utilisateur
+     * @return L'utilisateur mis à jour avec le statut actif calculé
+     */
+    Utilisateur mettreAJourStatutActif(Long userId);
+
+    /**
+     * Met à jour le statut actif de tous les utilisateurs
+     * Utile pour un job de maintenance ou un scheduler
+     * @return Nombre d'utilisateurs mis à jour
+     */
+    int mettreAJourStatutActifTous();
 }

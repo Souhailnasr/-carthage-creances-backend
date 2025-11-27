@@ -79,6 +79,8 @@ public class AuthenticationService {
         
         user.setDerniereConnexion(LocalDateTime.now());
         user.setDerniereDeconnexion(null);
+        // Mettre à jour le statut actif : utilisateur connecté = actif
+        user.mettreAJourStatutActif();
         var userWithAudit = repository.save(user);
 
         var jwtToken = jwtService.generateToken(userWithAudit);
