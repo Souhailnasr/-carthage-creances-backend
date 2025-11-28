@@ -93,26 +93,33 @@ public class AutomaticNotificationServiceImpl implements AutomaticNotificationSe
     }
     
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void notifierCreationActionAmiable(Action action, Dossier dossier) {
         if (action == null || dossier == null) {
             return;
         }
         
-        // Notifier l'agent responsable du dossier
-        if (dossier.getAgentResponsable() != null) {
-            String titre = "Action amiable créée";
-            String message = String.format("Une nouvelle action amiable a été créée pour le dossier %s.", 
-                    dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId());
-            
-            notificationService.creerNotificationAutomatique(
-                dossier.getAgentResponsable().getId(),
-                TypeNotification.ACTION_AMIABLE_CREE,
-                titre,
-                message,
-                dossier.getId(),
-                TypeEntite.DOSSIER,
-                "/dossiers/" + dossier.getId() + "/actions"
-            );
+        try {
+            // Notifier l'agent responsable du dossier
+            if (dossier.getAgentResponsable() != null) {
+                String titre = "Action amiable créée";
+                String message = String.format("Une nouvelle action amiable a été créée pour le dossier %s.", 
+                        dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId());
+                
+                notificationService.creerNotificationAutomatique(
+                    dossier.getAgentResponsable().getId(),
+                    TypeNotification.ACTION_AMIABLE_CREE,
+                    titre,
+                    message,
+                    dossier.getId(),
+                    TypeEntite.DOSSIER,
+                    "/dossiers/" + dossier.getId() + "/actions"
+                );
+            }
+        } catch (Exception e) {
+            // Logger l'erreur mais ne pas la propager pour ne pas affecter la transaction principale
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification de création d'action amiable: {}", e.getMessage(), e);
         }
     }
     

@@ -104,31 +104,42 @@ public class DossierMontantServiceImpl implements DossierMontantService {
     
     @Override
     public Dossier recalculerMontantRestantEtEtat(Dossier dossier) {
-        if (dossier.getMontantTotal() == null) {
-            dossier.setMontantTotal(0.0);
+        // S'assurer que montantCreance n'est pas null
+        if (dossier.getMontantCreance() == null) {
+            throw new IllegalArgumentException("Le montant de créance ne peut pas être null");
         }
+        
+        // S'assurer que montantRecouvre n'est pas null
         if (dossier.getMontantRecouvre() == null) {
             dossier.setMontantRecouvre(0.0);
         }
         
-        // Calculer le montant restant
-        BigDecimal montantTotal = BigDecimal.valueOf(dossier.getMontantTotal());
+        // IMPORTANT: montantTotal doit toujours être égal à montantCreance
+        dossier.setMontantTotal(dossier.getMontantCreance());
+        
+        // Calculer le montant restant : montantRestant = montantCreance - montantRecouvre
+        BigDecimal montantCreance = BigDecimal.valueOf(dossier.getMontantCreance());
         BigDecimal montantRecouvre = BigDecimal.valueOf(dossier.getMontantRecouvre());
-        BigDecimal montantRestant = montantTotal.subtract(montantRecouvre);
+        BigDecimal montantRestant = montantCreance.subtract(montantRecouvre);
         
         // S'assurer que montantRestant n'est pas négatif
         if (montantRestant.compareTo(BigDecimal.ZERO) < 0) {
             montantRestant = BigDecimal.ZERO;
-            // Ajuster montantRecouvre si nécessaire
-            dossier.setMontantRecouvre(montantTotal.doubleValue());
+            // Ajuster montantRecouvre si nécessaire (ne peut pas dépasser montantCreance)
+            dossier.setMontantRecouvre(montantCreance.doubleValue());
+            montantRecouvre = montantCreance;
         }
         
         dossier.setMontantRestant(montantRestant.doubleValue());
         
-        // Calculer l'état selon les règles tunisiennes
-        if (montantRestant.compareTo(BigDecimal.ZERO) == 0) {
+        // Calculer l'état selon les règles :
+        // RECOVERED_TOTAL : si montantRecouvre == montantCreance ET montantRestant == 0
+        // RECOVERED_PARTIAL : si montantRecouvre > 0 ET montantRestant > 0
+        // NOT_RECOVERED : si montantRecouvre == 0
+        BigDecimal zero = BigDecimal.ZERO;
+        if (montantRecouvre.compareTo(montantCreance) == 0 && montantRestant.compareTo(zero) == 0) {
             dossier.setEtatDossier(EtatDossier.RECOVERED_TOTAL);
-        } else if (montantRecouvre.compareTo(BigDecimal.ZERO) > 0) {
+        } else if (montantRecouvre.compareTo(zero) > 0 && montantRestant.compareTo(zero) > 0) {
             dossier.setEtatDossier(EtatDossier.RECOVERED_PARTIAL);
         } else {
             dossier.setEtatDossier(EtatDossier.NOT_RECOVERED);

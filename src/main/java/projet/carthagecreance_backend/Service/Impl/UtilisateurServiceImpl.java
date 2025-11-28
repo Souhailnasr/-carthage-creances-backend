@@ -72,28 +72,6 @@ public class UtilisateurServiceImpl implements UtilisateurService {
                 throw new IllegalArgumentException("Le rôle utilisateur est obligatoire.");
             }
 
-            // 2bis. Associer le chef créateur si fourni (obligatoire pour les agents)
-            Long chefCreateurId = null;
-            if (utilisateur.getChefCreateur() != null && utilisateur.getChefCreateur().getId() != null) {
-                chefCreateurId = utilisateur.getChefCreateur().getId();
-            } else if (utilisateur.getChefId() != null) {
-                chefCreateurId = utilisateur.getChefId();
-            }
-
-            Long finalChefCreateurId = chefCreateurId;
-            if (finalChefCreateurId != null) {
-                Utilisateur chefCreateur = utilisateurRepository.findById(finalChefCreateurId)
-                        .orElseThrow(() -> new IllegalArgumentException("Chef créateur introuvable avec l'id: " + finalChefCreateurId));
-
-                if (!(estChef(chefCreateur.getRoleUtilisateur()) || chefCreateur.getRoleUtilisateur() == RoleUtilisateur.SUPER_ADMIN)) {
-                    throw new IllegalArgumentException("L'utilisateur " + finalChefCreateurId + " n'est pas autorisé à créer des agents.");
-                }
-
-                utilisateur.setChefCreateur(chefCreateur);
-            } else if (estAgent(utilisateur.getRoleUtilisateur())) {
-                throw new IllegalArgumentException("Un agent doit être rattaché à un chef créateur.");
-            }
-
             // 3. Encoder le mot de passe
             String encodedPassword = passwordEncoder.encode(utilisateur.getMotDePasse());
             System.out.println("Mot de passe crypté: " + encodedPassword);
@@ -202,10 +180,8 @@ public class UtilisateurServiceImpl implements UtilisateurService {
             existingUtilisateur.setPrenom(utilisateurDetails.getPrenom());
             
             // Ne mettez à jour le mot de passe que si un nouveau est fourni
-            // IMPORTANT : Encoder le mot de passe avant de le sauvegarder
             if (utilisateurDetails.getMotDePasse() != null && !utilisateurDetails.getMotDePasse().isEmpty()) {
-                String encodedPassword = passwordEncoder.encode(utilisateurDetails.getMotDePasse());
-                existingUtilisateur.setMotDePasse(encodedPassword);
+                existingUtilisateur.setMotDePasse(utilisateurDetails.getMotDePasse());
             }
             
             // Mettre à jour le rôle si fourni
@@ -489,46 +465,36 @@ public class UtilisateurServiceImpl implements UtilisateurService {
         // Déterminer le rôle du chef pour filtrer les agents appropriés
         RoleUtilisateur chefRole = chef.getRoleUtilisateur();
 
-        if (!(estChef(chefRole) || chefRole == RoleUtilisateur.SUPER_ADMIN)) {
-            throw new RuntimeException("Le rôle " + chefRole + " n'est pas autorisé à consulter les agents.");
-        }
+        List<Utilisateur> agents;
 
-        List<RoleUtilisateur> rolesAutorises = new java.util.ArrayList<>();
         if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER) {
-            rolesAutorises.add(RoleUtilisateur.AGENT_DOSSIER);
+            // Chef dossier : uniquement les agents dossier
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_DOSSIER);
         } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE) {
-            rolesAutorises.add(RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
+            // Chef amiable : uniquement les agents amiable
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
         } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE) {
-            rolesAutorises.add(RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
+            // Chef juridique : uniquement les agents juridique
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
         } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_FINANCE) {
-            rolesAutorises.add(RoleUtilisateur.AGENT_FINANCE);
+            // Chef finance : uniquement les agents finance
+            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_FINANCE);
         } else if (chefRole == RoleUtilisateur.SUPER_ADMIN) {
-            rolesAutorises.addAll(java.util.Arrays.asList(
-                    RoleUtilisateur.AGENT_DOSSIER,
-                    RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE,
-                    RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE,
-                    RoleUtilisateur.AGENT_FINANCE
-            ));
+            // Pour SUPER_ADMIN, retourner tous les agents
+            agents = utilisateurRepository.findByRoleUtilisateurIn(
+                    java.util.Arrays.asList(
+                            RoleUtilisateur.AGENT_DOSSIER,
+                            RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE,
+                            RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE,
+                            RoleUtilisateur.AGENT_FINANCE
+                    )
+            );
+        } else {
+            // Pour les autres rôles, retourner une liste vide
+            agents = java.util.Collections.emptyList();
         }
 
-        // Préférence : récupérer les agents explicitement liés au chef
-        List<Utilisateur> agentsAssocies = utilisateurRepository.findByChefCreateurId(chefId);
-
-        if (agentsAssocies.isEmpty()) {
-            // Rétrocompatibilité : retourner les agents par rôle si la relation n'est pas encore renseignée
-            if (rolesAutorises.isEmpty()) {
-                return java.util.Collections.emptyList();
-            }
-            return utilisateurRepository.findByRoleUtilisateurIn(rolesAutorises);
-        }
-
-        if (rolesAutorises.isEmpty()) {
-            return agentsAssocies;
-        }
-
-        return agentsAssocies.stream()
-                .filter(agent -> agent.getRoleUtilisateur() != null && rolesAutorises.contains(agent.getRoleUtilisateur()))
-                .collect(Collectors.toList());
+        return agents;
     }
 
     @Override
@@ -562,22 +528,5 @@ public class UtilisateurServiceImpl implements UtilisateurService {
         }
         
         return count;
-    }
-
-    @Override
-    @Transactional
-    public Utilisateur reinitialiserMotDePasse(Long userId, String nouveauMotDePasse) {
-        if (nouveauMotDePasse == null || nouveauMotDePasse.trim().isEmpty()) {
-            throw new IllegalArgumentException("Le nouveau mot de passe ne peut pas être vide");
-        }
-
-        Utilisateur user = utilisateurRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé avec l'ID: " + userId));
-
-        // Encoder le nouveau mot de passe
-        String encodedPassword = passwordEncoder.encode(nouveauMotDePasse);
-        user.setMotDePasse(encodedPassword);
-
-        return utilisateurRepository.save(user);
     }
 }

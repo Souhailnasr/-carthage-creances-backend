@@ -77,6 +77,9 @@ public class DossierServiceImpl implements DossierService {
     @Autowired
     private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
 
+    @Autowired
+    private projet.carthagecreance_backend.Service.DossierMontantService dossierMontantService;
+
     /**
      * Crée un nouveau dossier avec workflow de validation
      * Règles:
@@ -141,6 +144,14 @@ public class DossierServiceImpl implements DossierService {
                     .debiteur(debiteur)
                     .agentCreateur(agentCreateur)
                     .build();
+
+            // 5.1. Initialiser les montants : montantTotal = montantCreance, montantRecouvre = 0
+            if (dossier.getMontantCreance() != null) {
+                dossier.setMontantTotal(dossier.getMontantCreance());
+                dossier.setMontantRecouvre(0.0);
+                // Recalculer montantRestant et état
+                dossier = dossierMontantService.recalculerMontantRestantEtEtat(dossier);
+            }
 
             // 5. Sauvegarder le Dossier
             Dossier savedDossier = dossierRepository.save(dossier);

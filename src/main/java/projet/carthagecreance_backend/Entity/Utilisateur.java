@@ -3,7 +3,6 @@ package projet.carthagecreance_backend.Entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -91,29 +90,6 @@ public class Utilisateur implements UserDetails {
     @Enumerated(EnumType.STRING)
     @Column(name = "role_Utilisateur")
     private RoleUtilisateur roleUtilisateur;
-
-    /**
-     * Chef ou utilisateur qui a créé cet utilisateur (permet de filtrer les agents par chef)
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chef_createur_id")
-    @JsonIgnoreProperties({"agentsCrees", "chefCreateur"})
-    private Utilisateur chefCreateur;
-
-    /**
-     * Champ transitoire pour permettre au frontend d'envoyer simplement un chefId ou chefCreateurId
-     */
-    @Transient
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    private Long chefId;
-
-    /**
-     * Liste des utilisateurs (agents) créés par ce chef
-     */
-    @OneToMany(mappedBy = "chefCreateur", fetch = FetchType.LAZY)
-    @Builder.Default
-    @JsonIgnore
-    private List<Utilisateur> agentsCrees = new ArrayList<>();
 
     @ManyToMany(mappedBy = "utilisateurs")
     @JsonIgnore // Évite la récursion infinie

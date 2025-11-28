@@ -43,9 +43,6 @@ public interface UtilisateurRepository extends JpaRepository<Utilisateur, Long> 
     // Rechercher par plusieurs rôles
     List<Utilisateur> findByRoleUtilisateurIn(List<RoleUtilisateur> roles);
 
-    // Rechercher les agents créés par un chef spécifique
-    List<Utilisateur> findByChefCreateurId(Long chefId);
-
     // Rechercher les utilisateurs avec des dossiers
     @Query("SELECT u FROM Utilisateur u WHERE SIZE(u.dossiers) > 0")
     List<Utilisateur> findUtilisateursAvecDossiers();
