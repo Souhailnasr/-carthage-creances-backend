@@ -202,8 +202,10 @@ public class UtilisateurServiceImpl implements UtilisateurService {
             existingUtilisateur.setPrenom(utilisateurDetails.getPrenom());
             
             // Ne mettez à jour le mot de passe que si un nouveau est fourni
+            // IMPORTANT : Encoder le mot de passe avant de le sauvegarder
             if (utilisateurDetails.getMotDePasse() != null && !utilisateurDetails.getMotDePasse().isEmpty()) {
-                existingUtilisateur.setMotDePasse(utilisateurDetails.getMotDePasse());
+                String encodedPassword = passwordEncoder.encode(utilisateurDetails.getMotDePasse());
+                existingUtilisateur.setMotDePasse(encodedPassword);
             }
             
             // Mettre à jour le rôle si fourni
@@ -560,5 +562,22 @@ public class UtilisateurServiceImpl implements UtilisateurService {
         }
         
         return count;
+    }
+
+    @Override
+    @Transactional
+    public Utilisateur reinitialiserMotDePasse(Long userId, String nouveauMotDePasse) {
+        if (nouveauMotDePasse == null || nouveauMotDePasse.trim().isEmpty()) {
+            throw new IllegalArgumentException("Le nouveau mot de passe ne peut pas être vide");
+        }
+
+        Utilisateur user = utilisateurRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé avec l'ID: " + userId));
+
+        // Encoder le nouveau mot de passe
+        String encodedPassword = passwordEncoder.encode(nouveauMotDePasse);
+        user.setMotDePasse(encodedPassword);
+
+        return utilisateurRepository.save(user);
     }
 }

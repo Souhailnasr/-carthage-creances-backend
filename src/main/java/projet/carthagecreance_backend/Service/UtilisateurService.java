@@ -157,4 +157,12 @@ public interface UtilisateurService {
      * @return Nombre d'utilisateurs mis à jour
      */
     int mettreAJourStatutActifTous();
+
+    /**
+     * Réinitialise le mot de passe d'un utilisateur
+     * @param userId L'ID de l'utilisateur
+     * @param nouveauMotDePasse Le nouveau mot de passe (en clair, sera hashé automatiquement)
+     * @return L'utilisateur mis à jour
+     */
+    Utilisateur reinitialiserMotDePasse(Long userId, String nouveauMotDePasse);
 }
