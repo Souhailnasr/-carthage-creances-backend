@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.DossierStatus;
+import projet.carthagecreance_backend.Entity.EtapeHuissier;
 import projet.carthagecreance_backend.Entity.Statut;
 import projet.carthagecreance_backend.Entity.TypeRecouvrement;
 import projet.carthagecreance_backend.Entity.Urgence;
@@ -181,4 +182,15 @@ public interface DossierRepository extends JpaRepository<Dossier, Long>, JpaSpec
     
     // Compter par type de recouvrement
     long countByTypeRecouvrement(TypeRecouvrement typeRecouvrement);
+    
+    // ==================== Méthodes pour le workflow huissier ====================
+    
+    // Rechercher par étape huissier avec pagination
+    Page<Dossier> findByEtapeHuissier(EtapeHuissier etapeHuissier, Pageable pageable);
+    
+    // Rechercher par étape huissier (liste simple)
+    List<Dossier> findByEtapeHuissier(EtapeHuissier etapeHuissier);
+    
+    // Compter par étape huissier
+    long countByEtapeHuissier(EtapeHuissier etapeHuissier);
 }

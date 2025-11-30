@@ -4,9 +4,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import projet.carthagecreance_backend.DTO.DocumentHuissierDTO;
-import projet.carthagecreance_backend.Entity.DocumentHuissier;
+import projet.carthagecreance_backend.Entity.*;
+import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Service.DocumentHuissierService;
+import projet.carthagecreance_backend.Service.FileStorageService;
 
 import java.util.List;
 import java.util.Map;
@@ -21,29 +24,109 @@ public class HuissierDocumentController {
 
     @Autowired
     private DocumentHuissierService documentHuissierService;
+    
+    @Autowired
+    private FileStorageService fileStorageService;
+    
+    @Autowired
+    private DossierRepository dossierRepository;
 
     /**
      * Crée un document huissier (PV mise en demeure, Ordonnance de paiement, etc.)
      * POST /api/huissier/document
+     * 
+     * Compatible avec deux formats :
+     * 1. JSON avec DocumentHuissierDTO (ancien format)
+     * 2. Form-data avec MultipartFile (nouveau format)
      */
     @PostMapping("/document")
-    public ResponseEntity<?> createDocument(@RequestBody DocumentHuissierDTO dto) {
+    public ResponseEntity<?> createDocument(
+            @RequestParam(value = "dossierId", required = false) Long dossierId,
+            @RequestParam(value = "typeDocument", required = false) String typeDocumentStr,
+            @RequestParam(value = "huissierName", required = false) String huissierName,
+            @RequestParam(value = "delaiLegalDays", required = false) Integer delaiLegalDays,
+            @RequestParam(value = "pieceJointe", required = false) MultipartFile file,
+            @RequestBody(required = false) DocumentHuissierDTO dto
+    ) {
         try {
-            // Validation
-            if (dto.getDossierId() == null) {
+            DocumentHuissierDTO finalDto;
+            
+            // Si des paramètres de formulaire sont fournis, utiliser le nouveau format
+            if (dossierId != null || typeDocumentStr != null || huissierName != null) {
+                // Validation des paramètres requis
+                if (dossierId == null) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "dossierId est requis"));
+                }
+                if (typeDocumentStr == null) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "typeDocument est requis"));
+                }
+                if (huissierName == null || huissierName.trim().isEmpty()) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "huissierName est requis"));
+                }
+                
+                // Convertir le typeDocument
+                TypeDocumentHuissier typeDocument;
+                try {
+                    typeDocument = TypeDocumentHuissier.valueOf(typeDocumentStr);
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "Type de document invalide: " + typeDocumentStr));
+                }
+                
+                // Créer le DTO
+                finalDto = DocumentHuissierDTO.builder()
+                        .dossierId(dossierId)
+                        .typeDocument(typeDocument)
+                        .huissierName(huissierName)
+                        .delaiLegalDays(delaiLegalDays)
+                        .build();
+                
+                // Gérer le fichier si présent
+                if (file != null && !file.isEmpty()) {
+                    try {
+                        fileStorageService.validateFile(file);
+                        String fileUrl = fileStorageService.storeFile(file, "huissier/documents");
+                        finalDto.setPieceJointeUrl(fileUrl);
+                    } catch (IllegalArgumentException e) {
+                        return ResponseEntity.badRequest()
+                                .body(Map.of("error", e.getMessage()));
+                    }
+                }
+            } else if (dto != null) {
+                // Utiliser l'ancien format (JSON)
+                finalDto = dto;
+            } else {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Données manquantes. Utilisez soit form-data soit JSON"));
+            }
+            
+            // Validation finale
+            if (finalDto.getDossierId() == null) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "dossierId est requis"));
             }
-            if (dto.getTypeDocument() == null) {
+            if (finalDto.getTypeDocument() == null) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "typeDocument est requis"));
             }
-            if (dto.getHuissierName() == null || dto.getHuissierName().trim().isEmpty()) {
+            if (finalDto.getHuissierName() == null || finalDto.getHuissierName().trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "huissierName est requis"));
             }
 
-            DocumentHuissier document = documentHuissierService.createDocument(dto);
+            DocumentHuissier document = documentHuissierService.createDocument(finalDto);
+            
+            // Mettre à jour l'étape du dossier si c'est le premier document
+            Dossier dossier = dossierRepository.findById(finalDto.getDossierId())
+                    .orElse(null);
+            if (dossier != null && dossier.getEtapeHuissier() == EtapeHuissier.EN_ATTENTE_DOCUMENTS) {
+                dossier.setEtapeHuissier(EtapeHuissier.EN_DOCUMENTS);
+                dossierRepository.save(dossier);
+            }
+            
             return new ResponseEntity<>(document, HttpStatus.CREATED);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()

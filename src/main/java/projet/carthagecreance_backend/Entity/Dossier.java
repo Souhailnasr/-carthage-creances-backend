@@ -83,6 +83,12 @@ public class Dossier implements Serializable {
     @Builder.Default
     private TypeRecouvrement typeRecouvrement = TypeRecouvrement.NON_AFFECTE;
     
+    // Workflow Huissier
+    @Enumerated(EnumType.STRING)
+    @Column(name = "etape_huissier", nullable = false)
+    @Builder.Default
+    private EtapeHuissier etapeHuissier = EtapeHuissier.EN_ATTENTE_DOCUMENTS;
+    
     // Utilisateurs associés
     @ManyToMany
     @JoinTable(
@@ -136,6 +142,9 @@ public class Dossier implements Serializable {
         dateCreation = new java.util.Date();
         if (statut == null) {
             statut = Statut.EN_ATTENTE_VALIDATION;
+        }
+        if (etapeHuissier == null) {
+            etapeHuissier = EtapeHuissier.EN_ATTENTE_DOCUMENTS;
         }
     }
     @ManyToOne(fetch = FetchType.LAZY)
