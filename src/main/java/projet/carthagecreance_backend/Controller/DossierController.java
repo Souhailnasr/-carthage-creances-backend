@@ -1429,6 +1429,33 @@ public class DossierController {
     }
 
     /**
+     * Affecte un dossier validé au chef du département finance
+     * PUT /api/dossiers/1/affecter/finance
+     */
+    @PutMapping("/{id}/affecter/finance")
+    public ResponseEntity<?> affecterAuFinance(@PathVariable Long id) {
+        try {
+            Dossier updatedDossier = dossierService.affecterAuFinance(id);
+            return new ResponseEntity<>(updatedDossier, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de l'affectation au finance: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur d'affectation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de l'affectation: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                        "error", "Erreur interne du serveur",
+                        "message", "Erreur lors de l'affectation: " + e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+        }
+    }
+
+    /**
      * Clôture un dossier validé
      * 
      * @param id L'ID du dossier à clôturer

@@ -929,6 +929,67 @@ public class DossierServiceImpl implements DossierService {
     
     @Override
     @Transactional
+    public Dossier affecterAuFinance(Long dossierId) {
+        // Vérifier que le dossier existe
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier que le dossier est validé
+        if (dossier.getStatut() != Statut.VALIDE || !Boolean.TRUE.equals(dossier.getValide())) {
+            throw new RuntimeException("Seuls les dossiers validés peuvent être affectés au département finance");
+        }
+        
+        // Vérifier que le dossier n'est pas déjà clôturé
+        if (dossier.getDossierStatus() == DossierStatus.CLOTURE) {
+            throw new RuntimeException("Un dossier clôturé ne peut pas être affecté");
+        }
+        
+        // Trouver le chef du département finance
+        List<Utilisateur> chefsFinances = utilisateurRepository.findByRoleUtilisateur(
+            RoleUtilisateur.CHEF_DEPARTEMENT_FINANCE
+        );
+        
+        if (chefsFinances.isEmpty()) {
+            throw new RuntimeException("Aucun chef du département finance trouvé");
+        }
+        
+        // Prendre le premier chef finance disponible
+        Utilisateur chefFinance = chefsFinances.get(0);
+        
+        // Assigner le chef comme agent responsable
+        dossier.setAgentResponsable(chefFinance);
+        
+        // Mettre à jour le type de recouvrement
+        dossier.setTypeRecouvrement(TypeRecouvrement.FINANCE);
+        
+        // Initialiser la liste utilisateurs si elle est null
+        if (dossier.getUtilisateurs() == null) {
+            dossier.setUtilisateurs(new ArrayList<>());
+        }
+        
+        // Ajouter le chef à la liste des utilisateurs associés (éviter les doublons)
+        if (!dossier.getUtilisateurs().contains(chefFinance)) {
+            dossier.getUtilisateurs().add(chefFinance);
+        }
+        
+        // Récupérer tous les agents du département finance
+        List<Utilisateur> agentsFinances = utilisateurRepository.findByRoleUtilisateur(
+            RoleUtilisateur.AGENT_FINANCE
+        );
+        
+        // Ajouter les agents à la liste des utilisateurs associés
+        for (Utilisateur agent : agentsFinances) {
+            if (!dossier.getUtilisateurs().contains(agent)) {
+                dossier.getUtilisateurs().add(agent);
+            }
+        }
+        
+        // Sauvegarder
+        return dossierRepository.save(dossier);
+    }
+    
+    @Override
+    @Transactional
     public Dossier cloturerDossier(Long dossierId) {
         // Vérifier que le dossier existe
         Dossier dossier = dossierRepository.findById(dossierId)

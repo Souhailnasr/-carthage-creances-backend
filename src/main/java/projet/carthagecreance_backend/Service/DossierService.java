@@ -243,6 +243,14 @@ public interface DossierService {
     Dossier affecterAuRecouvrementJuridique(Long dossierId);
     
     /**
+     * Affecte un dossier validé au chef du département finance
+     * @param dossierId L'ID du dossier à affecter
+     * @return Le dossier mis à jour avec le chef financier assigné comme agentResponsable
+     * @throws RuntimeException si le dossier n'existe pas, n'est pas validé, ou si aucun chef financier n'est trouvé
+     */
+    Dossier affecterAuFinance(Long dossierId);
+    
+    /**
      * Clôture un dossier validé
      * @param dossierId L'ID du dossier à clôturer
      * @return Le dossier mis à jour avec dossierStatus = CLOTURE et dateCloture remplie

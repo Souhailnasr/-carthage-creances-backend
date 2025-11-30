@@ -17,6 +17,11 @@ public enum TypeRecouvrement {
     /**
      * Dossier affecté au recouvrement juridique
      */
-    JURIDIQUE
+    JURIDIQUE,
+    
+    /**
+     * Dossier affecté au département finance
+     */
+    FINANCE
 }
 
