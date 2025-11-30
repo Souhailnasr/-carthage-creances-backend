@@ -583,3 +583,6 @@ Si vous rencontrez des problèmes lors de l'implémentation :
 3. Vérifier la structure des DTOs envoyés
 4. Tester avec Postman/curl avant d'intégrer dans le frontend
 
+
+
+

@@ -226,3 +226,6 @@ private DossierMontantService dossierMontantService;
 2. **Si Option 1** : Appliquer les modifications backend ci-dessus
 3. **Intégrer frontend** : Utiliser le prompt approprié selon l'option choisie
 
+
+
+

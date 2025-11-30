@@ -40,7 +40,7 @@ public class Audience implements Serializable {
     private Avocat avocat;
     
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "hussier_id", nullable = true)
+    @JoinColumn(name = "huissier_id", nullable = true)
     private Huissier huissier;
 }
 

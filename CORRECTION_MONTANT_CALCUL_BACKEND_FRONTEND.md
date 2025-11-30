@@ -470,3 +470,6 @@ Si vous rencontrez des problèmes :
 3. Vérifier que les données dans la base sont cohérentes
 4. Tester avec Postman/curl avant d'intégrer dans le frontend
 
+
+
+

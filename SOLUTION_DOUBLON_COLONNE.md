@@ -1,0 +1,91 @@
+# 🔧 Solution : Problème de Colonne en Double (hussier_id / huissier_id)
+
+## 🎯 Problème Identifié
+
+Vous avez **DEUX colonnes** dans la table `audiences` :
+1. ✅ `huissier_id` (colonne #10) - **CORRECTE** (avec deux 'i')
+2. ❌ `hussier_id` (colonne #11) - **DOUBLON** (avec une faute, un seul 'i')
+
+Hibernate essaie d'ajouter `hussier_id` parce qu'il détecte une incohérence entre le code Java et la base de données.
+
+---
+
+## ✅ Solution en 2 Étapes
+
+### **ÉTAPE 1 : Supprimer la Colonne en Double dans la Base de Données**
+
+Dans phpMyAdmin, dans l'onglet **SQL**, exécutez :
+
+```sql
+ALTER TABLE audiences 
+DROP COLUMN hussier_id;
+```
+
+**OU** via l'interface graphique :
+1. Cliquez sur la table `audiences` → onglet **Structure**
+2. Cochez la case de la colonne **`hussier_id`** (colonne #11)
+3. Dans le menu déroulant "With selected:", choisissez **"Drop"**
+4. Cliquez sur **"Go"**
+
+**⚠️ IMPORTANT** : Supprimez **`hussier_id`** (avec un seul 'i'), **PAS** `huissier_id` (avec deux 'i') !
+
+---
+
+### **ÉTAPE 2 : Vérifier que le Code Java est Correct**
+
+Le fichier `Audience.java` doit avoir :
+
+```java
+@JoinColumn(name = "huissier_id", nullable = true)
+```
+
+**Vérifiez** que c'est bien `huissier_id` (avec deux 'i') et non `hussier_id`.
+
+---
+
+### **ÉTAPE 3 : Redémarrer le Serveur**
+
+Après avoir supprimé la colonne en double :
+
+1. **Arrêtez** le serveur Spring Boot
+2. **Redémarrez** le serveur
+3. **Vérifiez** les logs - vous ne devriez plus voir `alter table audience add column hussier_id`
+
+---
+
+## 🔍 Vérification
+
+Après avoir supprimé la colonne, vérifiez avec :
+
+```sql
+DESCRIBE audiences;
+```
+
+Vous devriez voir **UNIQUEMENT** `huissier_id` (colonne #10), et **PAS** `hussier_id`.
+
+---
+
+## 🎯 Pourquoi Hibernate Essaie d'Ajouter la Colonne ?
+
+Hibernate est configuré en mode `update` (`spring.jpa.hibernate.ddl-auto=update`), ce qui signifie qu'il essaie de synchroniser le schéma de la base de données avec les entités Java.
+
+Quand il voit :
+- Dans le code : `@JoinColumn(name = "huissier_id")` 
+- Dans la base : deux colonnes (`huissier_id` ET `hussier_id`)
+
+Il essaie de "corriger" en ajoutant `hussier_id`, ce qui crée un conflit.
+
+---
+
+## ✅ Après la Correction
+
+Une fois la colonne en double supprimée :
+
+1. ✅ Hibernate ne tentera plus d'ajouter `hussier_id`
+2. ✅ La création d'audience fonctionnera correctement
+3. ✅ L'erreur "Transaction silently rolled back" devrait disparaître
+
+---
+
+**C'est exactement le problème ! Supprimez la colonne `hussier_id` et tout devrait fonctionner. 🎉**
+
