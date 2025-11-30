@@ -5,6 +5,7 @@ public enum TypeChangementAudit {
     DOCUMENT_CREATE,    // Création de document
     ACTION_CREATE,      // Création d'action
     STATUS_UPDATE,      // Mise à jour de statut
-    DOSSIER_UPDATE      // Mise à jour générale du dossier
+    DOSSIER_UPDATE,      // Mise à jour générale du dossier
+    DOCUMENT_UPDATE
 }
 

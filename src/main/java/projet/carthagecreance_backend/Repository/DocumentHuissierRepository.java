@@ -10,15 +10,14 @@ import java.util.List;
 
 @Repository
 public interface DocumentHuissierRepository extends JpaRepository<DocumentHuissier, Long> {
-    
+
     List<DocumentHuissier> findByDossierId(Long dossierId);
-    
+
     List<DocumentHuissier> findByTypeDocument(TypeDocumentHuissier typeDocument);
-    
+
     List<DocumentHuissier> findByStatus(StatutDocumentHuissier status);
-    
+
     List<DocumentHuissier> findByDossierIdAndStatus(Long dossierId, StatutDocumentHuissier status);
-    
+
     List<DocumentHuissier> findByStatusAndNotified(StatutDocumentHuissier status, Boolean notified);
 }
-

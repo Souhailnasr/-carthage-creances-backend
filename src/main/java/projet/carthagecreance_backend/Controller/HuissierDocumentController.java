@@ -18,10 +18,10 @@ import java.util.Map;
 @RequestMapping({"/api/huissier", "/huissier"})
 @CrossOrigin(origins = "*")
 public class HuissierDocumentController {
-    
+
     @Autowired
     private DocumentHuissierService documentHuissierService;
-    
+
     /**
      * Crée un document huissier (PV mise en demeure, Ordonnance de paiement, etc.)
      * POST /api/huissier/document
@@ -42,7 +42,7 @@ public class HuissierDocumentController {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "huissierName est requis"));
             }
-            
+
             DocumentHuissier document = documentHuissierService.createDocument(dto);
             return new ResponseEntity<>(document, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -53,7 +53,7 @@ public class HuissierDocumentController {
                     .body(Map.of("error", "Erreur interne: " + e.getMessage()));
         }
     }
-    
+
     /**
      * Récupère un document par son ID
      * GET /api/huissier/document/{id}
@@ -68,7 +68,7 @@ public class HuissierDocumentController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
-    
+
     /**
      * Récupère tous les documents d'un dossier
      * GET /api/huissier/documents?dossierId={id}
@@ -83,7 +83,44 @@ public class HuissierDocumentController {
                     .body(Map.of("error", "Erreur lors de la récupération: " + e.getMessage()));
         }
     }
-    
+
+    /**
+     * Marque un document comme complété
+     * PUT /api/huissier/document/{id}/complete
+     * Contraintes :
+     * - Seulement si le statut est PENDING
+     * - Impossible si le statut est EXPIRED
+     * - Impossible si le statut est déjà COMPLETED
+     */
+    @PutMapping("/document/{id}/complete")
+    public ResponseEntity<?> markDocumentAsCompleted(@PathVariable Long id) {
+        try {
+            System.out.println("=== DÉBUT markDocumentAsCompleted pour document ID: " + id + " ===");
+            DocumentHuissier document = documentHuissierService.markAsCompleted(id);
+            System.out.println("=== SUCCÈS markDocumentAsCompleted ===");
+            return ResponseEntity.ok(document);
+        } catch (RuntimeException e) {
+            System.err.println("❌ ERREUR Runtime dans markDocumentAsCompleted: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest()
+                    .body(Map.of(
+                            "error", "Erreur lors du marquage du document",
+                            "message", e.getMessage(),
+                            "documentId", id
+                    ));
+        } catch (Exception e) {
+            System.err.println("❌ ERREUR Exception dans markDocumentAsCompleted: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "error", "Erreur interne du serveur",
+                            "message", e.getMessage() != null ? e.getMessage() : "Une erreur inattendue s'est produite",
+                            "documentId", id,
+                            "exceptionType", e.getClass().getName()
+                    ));
+        }
+    }
+
     /**
      * Marque un document comme expiré (utilisé par le scheduler)
      * PUT /api/huissier/document/{id}/expire
@@ -99,4 +136,3 @@ public class HuissierDocumentController {
         }
     }
 }
-
