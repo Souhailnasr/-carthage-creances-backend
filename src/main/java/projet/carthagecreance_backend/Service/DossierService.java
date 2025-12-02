@@ -258,6 +258,10 @@ public interface DossierService {
      */
     Dossier cloturerDossier(Long dossierId);
     
+    // ✅ NOUVEAU : Méthodes pour la clôture et archivage après paiement complet
+    projet.carthagecreance_backend.DTO.PeutEtreClotureDTO peutEtreCloture(Long dossierId);
+    projet.carthagecreance_backend.DTO.ClotureDossierDTO cloturerEtArchiver(Long dossierId);
+    
     /**
      * Récupère les dossiers validés disponibles pour l'affectation
      * @param page Numéro de page (0-indexed)

@@ -17,6 +17,16 @@ public enum StatutTarif {
     /**
      * Tarif rejeté par le chef financier
      */
-    REJETE
+    REJETE,
+    
+    /**
+     * Tarif inclus dans une facture
+     */
+    FACTURE,
+    
+    /**
+     * Tarif payé (facture entièrement payée)
+     */
+    PAYE
 }
 

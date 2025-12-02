@@ -26,5 +26,9 @@ public interface FactureService {
     void deleteFacture(Long id);
     Double calculerMontantHT(List<Long> tarifDossierIds);
     Double calculerMontantTTC(Double montantHT, Double tauxTVA);
+    
+    // ✅ NOUVEAU : Méthodes pour la clôture et archivage
+    projet.carthagecreance_backend.DTO.SoldeFactureDTO calculerSoldeRestant(Long factureId);
+    Facture verifierEtMettreAJourStatutFacture(Long factureId);
 }
 

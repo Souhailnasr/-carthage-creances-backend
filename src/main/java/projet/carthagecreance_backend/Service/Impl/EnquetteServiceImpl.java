@@ -8,8 +8,21 @@ import projet.carthagecreance_backend.Repository.EnquetteRepository;
 import projet.carthagecreance_backend.Repository.UtilisateurRepository;
 import projet.carthagecreance_backend.Repository.ValidationEnqueteRepository;
 import projet.carthagecreance_backend.Repository.DossierRepository;
+import projet.carthagecreance_backend.Repository.ActionRepository;
+import projet.carthagecreance_backend.Repository.AudienceRepository;
+import projet.carthagecreance_backend.Repository.ActionHuissierRepository;
 import projet.carthagecreance_backend.Service.EnquetteService;
 import projet.carthagecreance_backend.Service.NotificationService;
+import projet.carthagecreance_backend.Service.IaPredictionService;
+import projet.carthagecreance_backend.Service.Impl.IaFeatureBuilderService;
+import projet.carthagecreance_backend.DTO.IaPredictionResult;
+import projet.carthagecreance_backend.Repository.ActionRepository;
+import projet.carthagecreance_backend.Repository.AudienceRepository;
+import projet.carthagecreance_backend.Repository.ActionHuissierRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,6 +46,23 @@ public class EnquetteServiceImpl implements EnquetteService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private IaPredictionService iaPredictionService;
+
+    @Autowired
+    private IaFeatureBuilderService iaFeatureBuilderService;
+
+    @Autowired
+    private ActionRepository actionRepository;
+
+    @Autowired
+    private AudienceRepository audienceRepository;
+
+    @Autowired
+    private ActionHuissierRepository actionHuissierRepository;
+
+    private static final Logger logger = LoggerFactory.getLogger(EnquetteServiceImpl.class);
 
     @Override
     @Transactional
@@ -97,6 +127,10 @@ public class EnquetteServiceImpl implements EnquetteService {
                         .dateValidation(LocalDateTime.now())
                         .build();
                 validationEnqueteRepository.save(validation);
+                
+                // ✅ NOUVEAU : Déclencher la prédiction IA après validation automatique
+                triggerIaPrediction(savedEnquette.getDossier().getId(), savedEnquette);
+                
                 return savedEnquette;
             } else {
                 // Enquête en attente si créée par un agent
@@ -398,10 +432,14 @@ public class EnquetteServiceImpl implements EnquetteService {
         // Envoyer une notification à l'agent créateur
         // Essayer de charger l'enquête pour obtenir le rapportCode
         String rapportCode = "ID " + enquetteId;
+        Enquette enquetteValidated = null;
         try {
             Optional<Enquette> enquetteOpt = enquetteRepository.findByIdNative(enquetteId);
-            if (enquetteOpt.isPresent() && enquetteOpt.get().getRapportCode() != null) {
-                rapportCode = enquetteOpt.get().getRapportCode();
+            if (enquetteOpt.isPresent()) {
+                enquetteValidated = enquetteOpt.get();
+                if (enquetteValidated.getRapportCode() != null) {
+                    rapportCode = enquetteValidated.getRapportCode();
+                }
             }
         } catch (Exception e) {
             // Utiliser l'ID par défaut si on ne peut pas charger l'enquête
@@ -421,6 +459,11 @@ public class EnquetteServiceImpl implements EnquetteService {
                         .build();
                 notificationService.createNotification(notification);
             }
+        }
+        
+        // ✅ NOUVEAU : Déclencher la prédiction IA après validation
+        if (enquetteValidated != null && enquetteValidated.getDossier() != null) {
+            triggerIaPrediction(enquetteValidated.getDossier().getId(), enquetteValidated);
         }
     }
 
@@ -487,6 +530,55 @@ public class EnquetteServiceImpl implements EnquetteService {
                         .build();
                 notificationService.createNotification(notification);
             }
+        }
+    }
+
+    /**
+     * Déclenche la prédiction IA pour un dossier après validation de l'enquête
+     * 
+     * @param dossierId ID du dossier
+     * @param enquette L'enquête validée
+     */
+    private void triggerIaPrediction(Long dossierId, Enquette enquette) {
+        try {
+            logger.info("Déclenchement de la prédiction IA pour le dossier {} après validation de l'enquête {}", dossierId, enquette.getId());
+            
+            // Récupérer le dossier
+            Dossier dossier = dossierRepository.findById(dossierId)
+                    .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+            
+            // Récupérer les données associées
+            List<Action> actions = actionRepository.findByDossierId(dossierId);
+            List<Audience> audiences = audienceRepository.findByDossierId(dossierId);
+            List<ActionHuissier> actionsHuissier = actionHuissierRepository.findByDossierId(dossierId);
+            
+            // Construire les features à partir des données réelles
+            Map<String, Object> features = iaFeatureBuilderService.buildFeaturesFromRealData(
+                dossier,
+                enquette,  // Utiliser l'enquête validée
+                actions,
+                audiences,
+                actionsHuissier
+            );
+            
+            // Prédire avec l'IA
+            IaPredictionResult prediction = iaPredictionService.predictRisk(features);
+            
+            // Mettre à jour le dossier avec les résultats de la prédiction
+            dossier.setEtatPrediction(EtatDossier.valueOf(prediction.getEtatFinal()));
+            dossier.setRiskScore(prediction.getRiskScore());
+            dossier.setRiskLevel(prediction.getRiskLevel());
+            
+            // Sauvegarder le dossier mis à jour
+            dossierRepository.save(dossier);
+            
+            logger.info("Prédiction IA appliquée au dossier {} après validation de l'enquête: etatPrediction={}, riskScore={}, riskLevel={}", 
+                dossierId, prediction.getEtatFinal(), prediction.getRiskScore(), prediction.getRiskLevel());
+            
+        } catch (Exception e) {
+            // En cas d'erreur avec l'IA, on continue quand même (pas bloquant)
+            logger.warn("Erreur lors de la prédiction IA pour le dossier {} après validation de l'enquête {}: {}. Le dossier sera sauvegardé sans prédiction.", 
+                dossierId, enquette != null ? enquette.getId() : "N/A", e.getMessage());
         }
     }
 

@@ -1040,6 +1040,116 @@ public class DossierServiceImpl implements DossierService {
         return savedDossier;
     }
     
+    @Autowired
+    private projet.carthagecreance_backend.Service.FactureService factureService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.FactureRepository factureRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.TarifDossierRepository tarifDossierRepository;
+    
+    @Override
+    public projet.carthagecreance_backend.DTO.PeutEtreClotureDTO peutEtreCloture(Long dossierId) {
+        logger.info("Vérification si le dossier {} peut être clôturé", dossierId);
+        
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        java.util.List<String> raisons = new java.util.ArrayList<>();
+        boolean peutEtreCloture = true;
+        
+        // Récupérer la facture du dossier
+        java.util.List<projet.carthagecreance_backend.Entity.Facture> factures = factureRepository.findByDossierId(dossierId);
+        if (factures == null || factures.isEmpty()) {
+            peutEtreCloture = false;
+            raisons.add("Aucune facture trouvée pour ce dossier");
+            return projet.carthagecreance_backend.DTO.PeutEtreClotureDTO.builder()
+                    .peutEtreCloture(false)
+                    .raisons(raisons)
+                    .build();
+        }
+        
+        // Prendre la dernière facture (ou la seule)
+        projet.carthagecreance_backend.Entity.Facture facture = factures.get(factures.size() - 1);
+        
+        // Vérifier le statut de la facture
+        if (facture.getStatut() != projet.carthagecreance_backend.Entity.FactureStatut.PAYEE) {
+            peutEtreCloture = false;
+            raisons.add("La facture n'est pas entièrement payée");
+        }
+        
+        // Calculer le solde restant
+        projet.carthagecreance_backend.DTO.SoldeFactureDTO solde = factureService.calculerSoldeRestant(facture.getId());
+        
+        if (solde.getSoldeRestant().compareTo(java.math.BigDecimal.ZERO) > 0) {
+            peutEtreCloture = false;
+            raisons.add("Il reste un solde de " + solde.getSoldeRestant() + " TND à payer");
+        }
+        
+        return projet.carthagecreance_backend.DTO.PeutEtreClotureDTO.builder()
+                .peutEtreCloture(peutEtreCloture)
+                .raisons(raisons)
+                .factureId(facture.getId())
+                .montantTTC(solde.getMontantTTC())
+                .totalPaiementsValides(solde.getTotalPaiementsValides())
+                .soldeRestant(solde.getSoldeRestant())
+                .statutFacture(facture.getStatut().name())
+                .build();
+    }
+    
+    @Override
+    @Transactional
+    public projet.carthagecreance_backend.DTO.ClotureDossierDTO cloturerEtArchiver(Long dossierId) {
+        logger.info("Clôture et archivage du dossier {}", dossierId);
+        
+        // Vérifier les préconditions
+        projet.carthagecreance_backend.DTO.PeutEtreClotureDTO verification = peutEtreCloture(dossierId);
+        if (!verification.getPeutEtreCloture()) {
+            throw new RuntimeException("Le dossier ne peut pas être clôturé: " + String.join(", ", verification.getRaisons()));
+        }
+        
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Mettre à jour le dossier
+        dossier.setDossierStatus(DossierStatus.CLOTURE);
+        dossier.setStatut(Statut.CLOTURE);
+        dossier.setDateCloture(new java.util.Date());
+        dossier.setArchive(true);
+        dossier.setDateArchivage(new java.util.Date());
+        
+        dossierRepository.save(dossier);
+        
+        // Mettre à jour tous les frais
+        java.util.List<projet.carthagecreance_backend.Entity.TarifDossier> tarifs = tarifDossierRepository.findByDossierId(dossierId);
+        tarifs.forEach(tarif -> {
+            if (tarif.getStatut() == projet.carthagecreance_backend.Entity.StatutTarif.VALIDE 
+                    || tarif.getStatut() == projet.carthagecreance_backend.Entity.StatutTarif.FACTURE) {
+                tarif.setStatut(projet.carthagecreance_backend.Entity.StatutTarif.PAYE);
+            }
+        });
+        tarifDossierRepository.saveAll(tarifs);
+        
+        // Mettre à jour Finance
+        Optional<Finance> financeOpt = financeRepository.findByDossierId(dossierId);
+        if (financeOpt.isPresent()) {
+            Finance finance = financeOpt.get();
+            logger.info("Finance {} associée au dossier {} clôturé", finance.getId(), dossierId);
+        }
+        
+        logger.info("Dossier {} clôturé et archivé avec succès", dossierId);
+        
+        return projet.carthagecreance_backend.DTO.ClotureDossierDTO.builder()
+                .dossierId(dossierId)
+                .statut("CLOTURE")
+                .dateCloture(java.time.LocalDateTime.now())
+                .archive(true)
+                .dateArchivage(java.time.LocalDateTime.now())
+                .message("Dossier clôturé et archivé avec succès")
+                .build();
+    }
+    
     @Override
     @Transactional(readOnly = true)
     public Map<String, Object> getDossiersValidesDisponibles(int page, int size, String sort, String direction, String search) {

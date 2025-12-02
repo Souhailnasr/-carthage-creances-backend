@@ -97,6 +97,9 @@ public class PaiementServiceImpl implements PaiementService {
         paiementRepository.deleteById(id);
     }
 
+    @Autowired
+    private projet.carthagecreance_backend.Service.FactureService factureService;
+    
     @Override
     public Paiement validerPaiement(Long id) {
         logger.info("Validation du paiement ID: {}", id);
@@ -105,7 +108,21 @@ public class PaiementServiceImpl implements PaiementService {
                 .orElseThrow(() -> new RuntimeException("Paiement non trouvé avec l'ID: " + id));
 
         paiement.setStatut(StatutPaiement.VALIDE);
-        return paiementRepository.save(paiement);
+        Paiement paiementValide = paiementRepository.save(paiement);
+        
+        // ✅ NOUVEAU : Vérifier et mettre à jour automatiquement le statut de la facture
+        if (paiement.getFacture() != null) {
+            try {
+                factureService.verifierEtMettreAJourStatutFacture(paiement.getFacture().getId());
+                logger.info("Statut de la facture {} vérifié après validation du paiement {}", 
+                        paiement.getFacture().getId(), id);
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la vérification du statut de la facture: {}", e.getMessage());
+                // Ne pas bloquer la validation du paiement en cas d'erreur
+            }
+        }
+        
+        return paiementValide;
     }
 
     @Override

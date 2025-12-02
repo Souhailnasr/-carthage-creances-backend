@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.DTO.FactureDTO;
+import projet.carthagecreance_backend.DTO.SoldeFactureDTO;
 import projet.carthagecreance_backend.Entity.Facture;
 import projet.carthagecreance_backend.Entity.FactureStatut;
 import projet.carthagecreance_backend.Mapper.FactureMapper;
@@ -200,6 +201,39 @@ public class FactureController {
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+    }
+    
+    // ✅ NOUVEAU : Endpoint pour calculer le solde restant
+    @GetMapping("/{factureId}/solde")
+    public ResponseEntity<?> calculerSoldeRestant(@PathVariable Long factureId) {
+        try {
+            SoldeFactureDTO solde = factureService.calculerSoldeRestant(factureId);
+            return ResponseEntity.ok(solde);
+        } catch (Exception e) {
+            logger.error("Erreur lors du calcul du solde: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Erreur lors du calcul du solde",
+                    "message", e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
+        }
+    }
+    
+    // ✅ NOUVEAU : Endpoint pour vérifier et mettre à jour le statut de la facture
+    @PutMapping("/{factureId}/verifier-statut")
+    public ResponseEntity<?> verifierStatutFacture(@PathVariable Long factureId) {
+        try {
+            Facture facture = factureService.verifierEtMettreAJourStatutFacture(factureId);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return ResponseEntity.ok(factureDTO);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la vérification du statut: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Erreur lors de la vérification du statut",
+                    "message", e.getMessage(),
+                    "timestamp", new Date().toString()
+            ));
         }
     }
 }

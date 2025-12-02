@@ -1775,4 +1775,88 @@ public class DossierController {
                     .body(Map.of("error", "Erreur interne: " + e.getMessage()));
         }
     }
+
+    /**
+     * Endpoint dédié pour la prédiction IA d'un dossier
+     * Retourne uniquement le résultat de la prédiction sans modifier le dossier
+     * 
+     * @param id ID du dossier
+     * @return Résultat de la prédiction IA (etatFinal, riskScore, riskLevel)
+     */
+    @PostMapping("/{id}/predict-ia")
+    public ResponseEntity<?> predictIaForDossier(@PathVariable Long id) {
+        try {
+            // Récupérer le dossier
+            Dossier dossier = dossierRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + id));
+
+            // Récupérer les données associées
+            Optional<projet.carthagecreance_backend.Entity.Enquette> enqueteOpt = 
+                enquetteRepository.findByDossierId(id);
+            List<projet.carthagecreance_backend.Entity.Action> actions = 
+                actionRepository.findByDossierId(id);
+            List<projet.carthagecreance_backend.Entity.Audience> audiences = 
+                audienceRepository.findByDossierId(id);
+            List<projet.carthagecreance_backend.Entity.ActionHuissier> actionsHuissier = 
+                actionHuissierRepository.findByDossierId(id);
+
+            // Construire les features à partir des données réelles
+            Map<String, Object> features = iaFeatureBuilderService.buildFeaturesFromRealData(
+                dossier,
+                enqueteOpt.orElse(null),
+                actions,
+                audiences,
+                actionsHuissier
+            );
+
+            // Prédire avec l'IA
+            projet.carthagecreance_backend.DTO.IaPredictionResult prediction = 
+                iaPredictionService.predictRisk(features);
+
+            logger.info("Prédiction IA pour le dossier {}: etatFinal={}, riskScore={}, riskLevel={}", 
+                id, prediction.getEtatFinal(), prediction.getRiskScore(), prediction.getRiskLevel());
+
+            // Retourner uniquement le résultat de la prédiction (sans modifier le dossier)
+            return ResponseEntity.ok(prediction);
+
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la prédiction IA pour le dossier {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de la prédiction IA pour le dossier {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de la prédiction IA: " + e.getMessage()));
+        }
+    }
+    
+    // ✅ NOUVEAU : Endpoint pour vérifier si un dossier peut être clôturé
+    @GetMapping("/{dossierId}/peut-etre-cloture")
+    public ResponseEntity<?> peutEtreCloture(@PathVariable Long dossierId) {
+        try {
+            projet.carthagecreance_backend.DTO.PeutEtreClotureDTO result = dossierService.peutEtreCloture(dossierId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la vérification de clôture pour le dossier {}: {}", dossierId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de la vérification: " + e.getMessage()));
+        }
+    }
+    
+    // ✅ NOUVEAU : Endpoint pour clôturer et archiver un dossier
+    @PostMapping("/{dossierId}/cloturer-et-archiver")
+    public ResponseEntity<?> cloturerEtArchiver(@PathVariable Long dossierId) {
+        try {
+            projet.carthagecreance_backend.DTO.ClotureDossierDTO result = dossierService.cloturerEtArchiver(dossierId);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la clôture du dossier {}: {}", dossierId, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Erreur interne lors de la clôture du dossier {}: {}", dossierId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de la clôture: " + e.getMessage()));
+        }
+    }
 }

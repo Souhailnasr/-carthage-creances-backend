@@ -14,6 +14,9 @@ import java.util.List;
 public interface PaiementRepository extends JpaRepository<Paiement, Long> {
 
     List<Paiement> findByFactureId(Long factureId);
+    
+    // ✅ NOUVEAU : Trouver les paiements validés pour une facture
+    List<Paiement> findByFactureIdAndStatut(Long factureId, StatutPaiement statut);
 
     List<Paiement> findByStatut(StatutPaiement statut);
 

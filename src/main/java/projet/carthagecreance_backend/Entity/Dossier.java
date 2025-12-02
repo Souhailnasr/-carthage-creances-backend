@@ -66,6 +66,15 @@ public class Dossier implements Serializable {
 
     @Temporal(TemporalType.TIMESTAMP)
     private java.util.Date dateCloture;
+    
+    // ✅ Champs pour l'archivage
+    @Column(name = "archive")
+    @Builder.Default
+    private Boolean archive = false;
+    
+    @Column(name = "date_archivage")
+    @Temporal(TemporalType.TIMESTAMP)
+    private java.util.Date dateArchivage;
 
 
     // Pièces à joindre (chemins fichiers)

@@ -7,11 +7,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.DTO.FactureDTO;
 import projet.carthagecreance_backend.Entity.*;
+import projet.carthagecreance_backend.DTO.SoldeFactureDTO;
 import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Repository.FactureRepository;
+import projet.carthagecreance_backend.Repository.PaiementRepository;
 import projet.carthagecreance_backend.Repository.TarifDossierRepository;
 import projet.carthagecreance_backend.Service.FactureService;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +34,9 @@ public class FactureServiceImpl implements FactureService {
 
     @Autowired
     private TarifDossierRepository tarifDossierRepository;
+    
+    @Autowired
+    private PaiementRepository paiementRepository;
 
     @Override
     public Facture createFacture(FactureDTO dto) {
@@ -345,6 +351,81 @@ public class FactureServiceImpl implements FactureService {
         if (montantHT == null) return 0.0;
         if (tauxTVA == null) tauxTVA = TAUX_TVA_DEFAULT;
         return montantHT * (1 + tauxTVA / 100);
+    }
+    
+    @Override
+    public SoldeFactureDTO calculerSoldeRestant(Long factureId) {
+        logger.info("Calcul du solde restant pour la facture ID: {}", factureId);
+        
+        Facture facture = factureRepository.findById(factureId)
+                .orElseThrow(() -> new RuntimeException("Facture non trouvée avec l'ID: " + factureId));
+        
+        // Calculer le total des paiements validés
+        List<Paiement> paiementsValides = paiementRepository.findByFactureIdAndStatut(
+                factureId, StatutPaiement.VALIDE);
+        
+        BigDecimal totalPaiementsValides = paiementsValides.stream()
+                .map(p -> BigDecimal.valueOf(p.getMontant() != null ? p.getMontant() : 0.0))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal montantTTC = BigDecimal.valueOf(facture.getMontantTTC() != null ? facture.getMontantTTC() : 0.0);
+        BigDecimal soldeRestant = montantTTC.subtract(totalPaiementsValides);
+        
+        boolean estEntierementPayee = soldeRestant.compareTo(BigDecimal.ZERO) <= 0;
+        
+        return SoldeFactureDTO.builder()
+                .factureId(factureId)
+                .montantTTC(montantTTC)
+                .totalPaiementsValides(totalPaiementsValides)
+                .soldeRestant(soldeRestant)
+                .estEntierementPayee(estEntierementPayee)
+                .build();
+    }
+    
+    @Override
+    public Facture verifierEtMettreAJourStatutFacture(Long factureId) {
+        logger.info("Vérification et mise à jour du statut de la facture ID: {}", factureId);
+        
+        Facture facture = factureRepository.findById(factureId)
+                .orElseThrow(() -> new RuntimeException("Facture non trouvée avec l'ID: " + factureId));
+        
+        SoldeFactureDTO solde = calculerSoldeRestant(factureId);
+        
+        // Si le solde est <= 0 et tous les paiements sont validés
+        if (solde.getEstEntierementPayee()) {
+            // Vérifier que tous les paiements sont validés
+            List<Paiement> tousPaiements = paiementRepository.findByFactureId(factureId);
+            boolean tousValides = tousPaiements.stream()
+                    .allMatch(p -> p.getStatut() == StatutPaiement.VALIDE || p.getStatut() == StatutPaiement.REFUSE);
+            
+            if (tousValides && facture.getStatut() != FactureStatut.PAYEE) {
+                logger.info("Mise à jour du statut de la facture {} à PAYEE", factureId);
+                facture.setStatut(FactureStatut.PAYEE);
+                facture = factureRepository.save(facture);
+                
+                // Mettre à jour tous les frais liés
+                mettreAJourStatutFrais(facture.getDossierId());
+            }
+        }
+        
+        return facture;
+    }
+    
+    /**
+     * Met à jour le statut de tous les tarifs du dossier en PAYE
+     */
+    private void mettreAJourStatutFrais(Long dossierId) {
+        logger.info("Mise à jour du statut des frais pour le dossier ID: {}", dossierId);
+        
+        List<TarifDossier> tarifs = tarifDossierRepository.findByDossierId(dossierId);
+        tarifs.forEach(tarif -> {
+            if (tarif.getStatut() == StatutTarif.VALIDE || tarif.getStatut() == StatutTarif.FACTURE) {
+                tarif.setStatut(StatutTarif.PAYE);
+            }
+        });
+        tarifDossierRepository.saveAll(tarifs);
+        
+        logger.info("{} tarifs mis à jour en statut PAYE pour le dossier {}", tarifs.size(), dossierId);
     }
 }
 
