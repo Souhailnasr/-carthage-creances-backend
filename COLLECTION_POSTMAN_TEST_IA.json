@@ -1,0 +1,391 @@
+{
+	"info": {
+		"_postman_id": "test-ia-prediction-collection",
+		"name": "Test IA Prédiction - Carthage Créance",
+		"description": "Collection Postman pour tester l'intégration du modèle d'IA de prédiction",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentification",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.token) {",
+									"        pm.environment.set(\"token\", jsonData.token);",
+									"        console.log(\"Token sauvegardé dans l'environnement\");",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"votre_email@example.com\",\n  \"password\": \"votre_mot_de_passe\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Création Dossier",
+			"item": [
+				{
+					"name": "Créer Dossier de Test",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200 || pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.id) {",
+									"        pm.environment.set(\"dossier_id\", jsonData.id);",
+									"        console.log(\"Dossier créé avec ID: \" + jsonData.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"titre\": \"Test Prédiction IA\",\n  \"description\": \"Dossier de test pour la prédiction IA\",\n  \"numeroDossier\": \"TEST-IA-001\",\n  \"montantCreance\": 50000.0,\n  \"urgence\": \"MOYENNE\",\n  \"dossierStatus\": \"ENCOURSDETRAITEMENT\",\n  \"statut\": \"VALIDE\",\n  \"typeRecouvrement\": \"AMIABLE\",\n  \"typeCreancier\": \"PERSONNE_MORALE\",\n  \"nomCreancier\": \"Entreprise Test\",\n  \"typeDebiteur\": \"PERSONNE_MORALE\",\n  \"nomDebiteur\": \"Débiteur Test\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/dossiers/create",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"dossiers",
+								"create"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Création Enquête (Optionnel)",
+			"item": [
+				{
+					"name": "Créer Enquête",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dossierId\": {{dossier_id}},\n  \"rapportCode\": \"CC6008\",\n  \"chiffreAffaire\": 1000000.0,\n  \"resultatNet\": 100000.0,\n  \"capital\": 500000.0,\n  \"effectif\": 100,\n  \"appreciationBancaire\": \"Bonne\",\n  \"bienImmobilier\": \"Oui, plusieurs biens\",\n  \"bienMobilier\": \"Véhicules et équipements\",\n  \"secteurActivite\": \"Commerce\",\n  \"descriptionActivite\": \"Vente de produits\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/enquetes",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"enquetes"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "4. Création Actions (Optionnel)",
+			"item": [
+				{
+					"name": "Créer Action 1 - APPEL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dossierId\": {{dossier_id}},\n  \"type\": \"APPEL\",\n  \"dateAction\": \"2024-12-01\",\n  \"nbOccurrences\": 3,\n  \"coutUnitaire\": 5.0,\n  \"reponseDebiteur\": \"POSITIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/actions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"actions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Créer Action 2 - EMAIL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dossierId\": {{dossier_id}},\n  \"type\": \"EMAIL\",\n  \"dateAction\": \"2024-12-02\",\n  \"nbOccurrences\": 2,\n  \"coutUnitaire\": 2.0,\n  \"reponseDebiteur\": \"POSITIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/actions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"actions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Créer Action 3 - VISITE",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"dossierId\": {{dossier_id}},\n  \"type\": \"VISITE\",\n  \"dateAction\": \"2024-12-05\",\n  \"nbOccurrences\": 1,\n  \"coutUnitaire\": 50.0,\n  \"reponseDebiteur\": \"NEGATIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/actions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"actions"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "5. Test Prédiction IA",
+			"item": [
+				{
+					"name": "Enregistrer Action Amiable (Déclenche IA)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Prédiction IA présente\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('etatPrediction');",
+									"    pm.expect(jsonData).to.have.property('riskScore');",
+									"    pm.expect(jsonData).to.have.property('riskLevel');",
+									"});",
+									"",
+									"pm.test(\"Valeurs de prédiction valides\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    ",
+									"    // Vérifier etatPrediction",
+									"    var etatsValides = [\"RECOVERED_TOTAL\", \"RECOVERED_PARTIAL\", \"NOT_RECOVERED\"];",
+									"    pm.expect(etatsValides).to.include(jsonData.etatPrediction);",
+									"    ",
+									"    // Vérifier riskScore",
+									"    pm.expect(jsonData.riskScore).to.be.a('number');",
+									"    pm.expect(jsonData.riskScore).to.be.at.least(0);",
+									"    pm.expect(jsonData.riskScore).to.be.at.most(100);",
+									"    ",
+									"    // Vérifier riskLevel",
+									"    var niveauxValides = [\"Faible\", \"Moyen\", \"Élevé\"];",
+									"    pm.expect(niveauxValides).to.include(jsonData.riskLevel);",
+									"    ",
+									"    console.log(\"✅ Prédiction IA réussie:\");",
+									"    console.log(\"   - État prédit: \" + jsonData.etatPrediction);",
+									"    console.log(\"   - Score de risque: \" + jsonData.riskScore);",
+									"    console.log(\"   - Niveau de risque: \" + jsonData.riskLevel);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"montantRecouvre\": 15000.0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/dossiers/{{dossier_id}}/amiable",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"dossiers",
+								"{{dossier_id}}",
+								"amiable"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "6. Vérification",
+			"item": [
+				{
+					"name": "Récupérer Dossier avec Prédiction",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Prédiction IA présente dans la réponse\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('etatPrediction');",
+									"    pm.expect(jsonData).to.have.property('riskScore');",
+									"    pm.expect(jsonData).to.have.property('riskLevel');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/dossiers/{{dossier_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"dossiers",
+								"{{dossier_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8089/carthage-creance",
+			"type": "string"
+		},
+		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "dossier_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+

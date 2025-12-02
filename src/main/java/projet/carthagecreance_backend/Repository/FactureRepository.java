@@ -16,7 +16,9 @@ public interface FactureRepository extends JpaRepository<Facture, Long> {
 
     Optional<Facture> findByNumeroFacture(String numeroFacture);
 
-    List<Facture> findByDossierId(Long dossierId);
+    // ✅ Correction : Utiliser une requête @Query pour accéder à dossier.id
+    @Query("SELECT f FROM Facture f WHERE f.dossier.id = :dossierId")
+    List<Facture> findByDossierId(@Param("dossierId") Long dossierId);
 
     List<Facture> findByStatut(FactureStatut statut);
 

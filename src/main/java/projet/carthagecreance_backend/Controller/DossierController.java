@@ -69,6 +69,24 @@ public class DossierController {
     
     @Autowired
     private DossierMontantService dossierMontantService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.IaPredictionService iaPredictionService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.Impl.IaFeatureBuilderService iaFeatureBuilderService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.ActionRepository actionRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.ActionHuissierRepository actionHuissierRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.EnquetteRepository enquetteRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.AudienceRepository audienceRepository;
 
     // Méthode utilitaire pour déterminer si un rôle est chef
     private boolean isChef(RoleUtilisateur role) {
@@ -202,16 +220,136 @@ public class DossierController {
 
 
     /**
-     * Crée un nouveau dossier avec workflow (version simplifiée)
+     * Crée un nouveau dossier avec fichiers uploadés (multipart/form-data)
+     * 
+     * @param request Les données du dossier à créer (en JSON dans le FormData)
+     * @param contratSigne Fichier contrat signé (optionnel)
+     * @param pouvoir Fichier pouvoir (optionnel)
+     * @param isChef Indique si l'utilisateur crée en tant que chef
+     * @param authHeader Token JWT pour extraire l'utilisateur connecté
+     * @return ResponseEntity avec le dossier créé (201 CREATED) ou erreur
+     * 
+     * @example
+     * POST /api/dossiers/create?isChef=true
+     * Content-Type: multipart/form-data
+     * dossier: {"titre": "Dossier test", "nomCreancier": "Entreprise ABC", ...}
+     * contratSigne: [PDF file]
+     * pouvoir: [PDF file]
+     */
+    @PostMapping(path = "/create", consumes = {"multipart/form-data"})
+    public ResponseEntity<?> createDossierWithFiles(
+            @RequestPart("dossier") DossierRequest request,
+            @RequestPart(value = "contratSigne", required = false) MultipartFile contratSigne,
+            @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir,
+            @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef,
+            @RequestHeader(name = "Authorization", required = false) String authHeader) {
+        
+        try {
+            // Extraire l'utilisateur connecté depuis le token (obligatoire)
+            if (authHeader == null || authHeader.isBlank()) {
+                logger.warn("/api/dossiers/create (multipart) - Token manquant");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Non autorisé",
+                    "message", "Token d'authentification requis pour créer un dossier",
+                    "code", "TOKEN_MISSING",
+                    "timestamp", new Date().toString()
+                ));
+            }
+
+            Utilisateur utilisateurConnecte;
+            try {
+                utilisateurConnecte = userExtractionService.extractUserFromToken(authHeader);
+                if (utilisateurConnecte == null) {
+                    logger.warn("/api/dossiers/create (multipart) - Utilisateur non trouvé");
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "error", "Token invalide",
+                        "message", "Impossible d'extraire l'utilisateur depuis le token",
+                        "code", "USER_NOT_FOUND",
+                        "timestamp", new Date().toString()
+                    ));
+                }
+            } catch (ExpiredJwtException e) {
+                logger.error("/api/dossiers/create (multipart) - Token JWT expiré: {}", e.getMessage());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Token expiré",
+                    "message", "Votre session a expiré. Veuillez vous reconnecter pour créer un dossier.",
+                    "code", "TOKEN_EXPIRED",
+                    "expiredAt", e.getClaims().getExpiration().toString(),
+                    "currentTime", new Date().toString(),
+                    "timestamp", new Date().toString()
+                ));
+            }
+
+            // TOUJOURS définir agentCreateurId à partir de l'utilisateur connecté
+            request.setAgentCreateurId(utilisateurConnecte.getId());
+            logger.info("agentCreateurId défini automatiquement à partir de l'utilisateur connecté: ID={}", utilisateurConnecte.getId());
+
+            // Validation PDF
+            validatePdfFile(contratSigne, "contratSigne");
+            validatePdfFile(pouvoir, "pouvoir");
+
+            // Ajouter les fichiers au request
+            if (contratSigne != null && !contratSigne.isEmpty()) {
+                request.setContratSigneFile(contratSigne);
+            }
+            if (pouvoir != null && !pouvoir.isEmpty()) {
+                request.setPouvoirFile(pouvoir);
+            }
+
+            // Déterminer le statut selon le rôle de l'utilisateur connecté
+            boolean createurEstChef = isChef(utilisateurConnecte.getRoleUtilisateur());
+            if (createurEstChef || isChef) {
+                request.setStatut(Statut.VALIDE);
+            } else {
+                request.setStatut(Statut.EN_ATTENTE_VALIDATION);
+            }
+
+            Dossier createdDossier = dossierService.createDossier(request);
+
+            // Si l'utilisateur est chef, valider immédiatement le dossier
+            if (createurEstChef || isChef) {
+                try {
+                    dossierService.validerDossier(createdDossier.getId(), request.getAgentCreateurId());
+                    createdDossier = dossierService.getDossierById(createdDossier.getId()).orElse(createdDossier);
+                } catch (RuntimeException e) {
+                    logger.error("Erreur lors de la validation automatique par chef: {}", e.getMessage());
+                    return ResponseEntity.badRequest().body(Map.of(
+                        "error", "Validation chef",
+                        "message", e.getMessage(),
+                        "timestamp", new Date().toString()
+                    ));
+                }
+            }
+
+            return new ResponseEntity<>(createdDossier, HttpStatus.CREATED);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Erreur de validation",
+                "message", e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        } catch (RuntimeException e) {
+            logger.error("Erreur lors de la création du dossier avec fichiers: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                "error", "Erreur interne du serveur",
+                "message", "Erreur lors de la création du dossier: " + e.getMessage(),
+                "timestamp", new Date().toString()
+            ));
+        }
+    }
+
+    /**
+     * Crée un nouveau dossier avec workflow (version simplifiée - JSON uniquement)
      * 
      * @param request Les données du dossier à créer
      * @return ResponseEntity avec le dossier créé (201 CREATED) ou erreur (400 BAD_REQUEST)
      * 
      * @example
-     * POST /api/dossiers
+     * POST /api/dossiers/create
+     * Content-Type: application/json
      * {
      *   "titre": "Dossier test",
-     *   "agentCreateurId": 1,
      *   "nomCreancier": "Entreprise ABC",
      *   "nomDebiteur": "Client XYZ"
      * }
@@ -1551,10 +1689,10 @@ public class DossierController {
     }
     
     /**
-     * Enregistre une réponse amiable avec montant recouvré
+     * Enregistre une réponse amiable avec montant recouvré et prédiction IA
      * @param id ID du dossier
      * @param dto DTO contenant le montant recouvré
-     * @return Dossier mis à jour
+     * @return Dossier mis à jour avec prédiction IA
      */
     @PostMapping("/{id}/amiable")
     public ResponseEntity<?> enregistrerActionAmiable(
@@ -1577,6 +1715,50 @@ public class DossierController {
                 dto.getMontantRecouvre(), 
                 projet.carthagecreance_backend.Entity.ModeMiseAJour.ADD
             );
+            
+            // ✅ NOUVEAU : Prédiction IA
+            try {
+                // Récupérer les données associées
+                Optional<projet.carthagecreance_backend.Entity.Enquette> enqueteOpt = 
+                    enquetteRepository.findByDossierId(id);
+                List<projet.carthagecreance_backend.Entity.Action> actions = 
+                    actionRepository.findByDossierId(id);
+                List<projet.carthagecreance_backend.Entity.Audience> audiences = 
+                    audienceRepository.findByDossierId(id);
+                List<projet.carthagecreance_backend.Entity.ActionHuissier> actionsHuissier = 
+                    actionHuissierRepository.findByDossierId(id);
+                
+                // Construire les features à partir des données réelles
+                Map<String, Object> features = iaFeatureBuilderService.buildFeaturesFromRealData(
+                    dossier,
+                    enqueteOpt.orElse(null),
+                    actions,
+                    audiences,
+                    actionsHuissier
+                );
+                
+                // Prédire avec l'IA
+                projet.carthagecreance_backend.DTO.IaPredictionResult prediction = 
+                    iaPredictionService.predictRisk(features);
+                
+                // Mettre à jour le dossier avec les résultats de la prédiction
+                dossier.setEtatPrediction(
+                    projet.carthagecreance_backend.Entity.EtatDossier.valueOf(prediction.getEtatFinal())
+                );
+                dossier.setRiskScore(prediction.getRiskScore());
+                dossier.setRiskLevel(prediction.getRiskLevel());
+                
+                // Sauvegarder le dossier mis à jour
+                dossier = dossierRepository.save(dossier);
+                
+                logger.info("Prédiction IA appliquée au dossier {}: etatPrediction={}, riskScore={}, riskLevel={}", 
+                    id, prediction.getEtatFinal(), prediction.getRiskScore(), prediction.getRiskLevel());
+                
+            } catch (Exception e) {
+                // En cas d'erreur avec l'IA, on continue quand même (pas bloquant)
+                logger.warn("Erreur lors de la prédiction IA pour le dossier {}: {}. Le dossier sera sauvegardé sans prédiction.", 
+                    id, e.getMessage());
+            }
             
             return new ResponseEntity<>(dossier, HttpStatus.OK);
         } catch (IllegalArgumentException e) {

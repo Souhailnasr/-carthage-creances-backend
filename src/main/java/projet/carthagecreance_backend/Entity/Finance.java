@@ -6,6 +6,7 @@ import lombok.*;
 
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -76,6 +77,15 @@ public class Finance implements Serializable {
     @OneToMany(mappedBy = "finance", cascade = CascadeType.ALL)
     @JsonIgnore // Évite la récursion infinie
     private List<Action> actions;
+    
+    // ✅ Statut de validation des tarifs
+    @Enumerated(EnumType.STRING)
+    @Column(name = "statut_validation_tarifs")
+    @Builder.Default
+    private StatutValidationTarifs statutValidationTarifs = StatutValidationTarifs.EN_COURS;
+    
+    // Note: Les tarifs sont liés au Dossier, pas directement à Finance
+    // On peut les récupérer via TarifDossierRepository.findByDossierId(dossierId)
 
     // ✅ Calcul total des frais des actions
     public Double calculerTotalActions() {
@@ -116,6 +126,16 @@ public class Finance implements Serializable {
         double fraisHuissier = (this.fraisHuissier != null ? this.fraisHuissier : 0.0);
         
         return fraisCreation + coutGestion + coutActions + fraisAvocat + fraisHuissier;
+    }
+    
+    // ✅ Méthode utilitaire pour obtenir le dossierId
+    public Long getDossierId() {
+        return dossier != null ? dossier.getId() : null;
+    }
+    
+    // ✅ Méthode utilitaire pour obtenir le numéro de dossier
+    public String getNumeroDossier() {
+        return dossier != null ? dossier.getNumeroDossier() : null;
     }
 }
 

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import projet.carthagecreance_backend.DTO.FactureDTO;
 import projet.carthagecreance_backend.Entity.Facture;
 import projet.carthagecreance_backend.Entity.FactureStatut;
+import projet.carthagecreance_backend.Mapper.FactureMapper;
 import projet.carthagecreance_backend.Service.FactureService;
 
 import java.time.LocalDate;
@@ -26,12 +27,16 @@ public class FactureController {
 
     @Autowired
     private FactureService factureService;
+    
+    @Autowired
+    private FactureMapper factureMapper;
 
     @PostMapping
     public ResponseEntity<?> createFacture(@RequestBody FactureDTO dto) {
         try {
             Facture facture = factureService.createFacture(dto);
-            return new ResponseEntity<>(facture, HttpStatus.CREATED);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return new ResponseEntity<>(factureDTO, HttpStatus.CREATED);
         } catch (Exception e) {
             logger.error("Erreur lors de la création de la facture: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of(
@@ -45,39 +50,47 @@ public class FactureController {
     @GetMapping("/{id}")
     public ResponseEntity<?> getFactureById(@PathVariable Long id) {
         Optional<Facture> facture = factureService.getFactureById(id);
-        return facture.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
-                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+        return facture.map(value -> {
+            FactureDTO factureDTO = factureMapper.toDTO(value);
+            return new ResponseEntity<>(factureDTO, HttpStatus.OK);
+        }).orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     @GetMapping("/numero/{numero}")
     public ResponseEntity<?> getFactureByNumero(@PathVariable String numero) {
         Optional<Facture> facture = factureService.getFactureByNumero(numero);
-        return facture.map(value -> new ResponseEntity<>(value, HttpStatus.OK))
-                .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
+        return facture.map(value -> {
+            FactureDTO factureDTO = factureMapper.toDTO(value);
+            return new ResponseEntity<>(factureDTO, HttpStatus.OK);
+        }).orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
     @GetMapping
-    public ResponseEntity<List<Facture>> getAllFactures() {
+    public ResponseEntity<List<FactureDTO>> getAllFactures() {
         List<Facture> factures = factureService.getAllFactures();
-        return new ResponseEntity<>(factures, HttpStatus.OK);
+        List<FactureDTO> factureDTOs = factureMapper.toDTOList(factures);
+        return new ResponseEntity<>(factureDTOs, HttpStatus.OK);
     }
 
     @GetMapping("/dossier/{dossierId}")
-    public ResponseEntity<List<Facture>> getFacturesByDossier(@PathVariable Long dossierId) {
+    public ResponseEntity<List<FactureDTO>> getFacturesByDossier(@PathVariable Long dossierId) {
         List<Facture> factures = factureService.getFacturesByDossier(dossierId);
-        return new ResponseEntity<>(factures, HttpStatus.OK);
+        List<FactureDTO> factureDTOs = factureMapper.toDTOList(factures);
+        return new ResponseEntity<>(factureDTOs, HttpStatus.OK);
     }
 
     @GetMapping("/statut/{statut}")
-    public ResponseEntity<List<Facture>> getFacturesByStatut(@PathVariable FactureStatut statut) {
+    public ResponseEntity<List<FactureDTO>> getFacturesByStatut(@PathVariable FactureStatut statut) {
         List<Facture> factures = factureService.getFacturesByStatut(statut);
-        return new ResponseEntity<>(factures, HttpStatus.OK);
+        List<FactureDTO> factureDTOs = factureMapper.toDTOList(factures);
+        return new ResponseEntity<>(factureDTOs, HttpStatus.OK);
     }
 
     @GetMapping("/en-retard")
-    public ResponseEntity<List<Facture>> getFacturesEnRetard() {
+    public ResponseEntity<List<FactureDTO>> getFacturesEnRetard() {
         List<Facture> factures = factureService.getFacturesEnRetard();
-        return new ResponseEntity<>(factures, HttpStatus.OK);
+        List<FactureDTO> factureDTOs = factureMapper.toDTOList(factures);
+        return new ResponseEntity<>(factureDTOs, HttpStatus.OK);
     }
 
     @PostMapping("/dossier/{dossierId}/generer")
@@ -91,7 +104,8 @@ public class FactureController {
                     periodeDebut != null ? periodeDebut : LocalDate.now().minusMonths(1),
                     periodeFin != null ? periodeFin : LocalDate.now()
             );
-            return new ResponseEntity<>(facture, HttpStatus.CREATED);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return new ResponseEntity<>(factureDTO, HttpStatus.CREATED);
         } catch (Exception e) {
             logger.error("Erreur lors de la génération de la facture: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of(
@@ -106,7 +120,8 @@ public class FactureController {
     public ResponseEntity<?> finaliserFacture(@PathVariable Long id) {
         try {
             Facture facture = factureService.finaliserFacture(id);
-            return new ResponseEntity<>(facture, HttpStatus.OK);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return new ResponseEntity<>(factureDTO, HttpStatus.OK);
         } catch (RuntimeException e) {
             logger.error("Erreur lors de la finalisation: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of(
@@ -121,7 +136,8 @@ public class FactureController {
     public ResponseEntity<?> envoyerFacture(@PathVariable Long id) {
         try {
             Facture facture = factureService.envoyerFacture(id);
-            return new ResponseEntity<>(facture, HttpStatus.OK);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return new ResponseEntity<>(factureDTO, HttpStatus.OK);
         } catch (RuntimeException e) {
             logger.error("Erreur lors de l'envoi: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of(
@@ -136,7 +152,8 @@ public class FactureController {
     public ResponseEntity<?> relancerFacture(@PathVariable Long id) {
         try {
             Facture facture = factureService.relancerFacture(id);
-            return new ResponseEntity<>(facture, HttpStatus.OK);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return new ResponseEntity<>(factureDTO, HttpStatus.OK);
         } catch (RuntimeException e) {
             logger.error("Erreur lors de la relance: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of(
@@ -164,7 +181,8 @@ public class FactureController {
     public ResponseEntity<?> updateFacture(@PathVariable Long id, @RequestBody FactureDTO dto) {
         try {
             Facture facture = factureService.updateFacture(id, dto);
-            return new ResponseEntity<>(facture, HttpStatus.OK);
+            FactureDTO factureDTO = factureMapper.toDTO(facture);
+            return new ResponseEntity<>(factureDTO, HttpStatus.OK);
         } catch (RuntimeException e) {
             logger.error("Erreur lors de la mise à jour: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of(

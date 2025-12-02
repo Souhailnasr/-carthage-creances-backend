@@ -6,6 +6,8 @@ import projet.carthagecreance_backend.Entity.Finance;
 import projet.carthagecreance_backend.Repository.FinanceRepository;
 import projet.carthagecreance_backend.Service.FinanceService;
 import projet.carthagecreance_backend.Service.CoutCalculationService;
+import projet.carthagecreance_backend.Mapper.FinanceMapper;
+import projet.carthagecreance_backend.DTO.FinanceDTO;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -19,6 +21,9 @@ public class FinanceServiceImpl implements FinanceService {
     
     @Autowired
     private CoutCalculationService coutCalculationService;
+    
+    @Autowired
+    private FinanceMapper financeMapper;
 
     @Override
     public Finance createFinance(Finance finance) {
@@ -210,7 +215,18 @@ public class FinanceServiceImpl implements FinanceService {
                 page, size, 
                 org.springframework.data.domain.Sort.by(sort != null ? sort : "dateOperation").descending()
         );
-        return financeRepository.findAll(pageable);
+        // ✅ Utiliser la méthode avec EntityGraph pour charger la relation Dossier
+        return financeRepository.findAllWithDossier(pageable);
+    }
+    
+    /**
+     * ✅ NOUVELLE MÉTHODE : Retourne les dossiers avec coûts en DTO (avec dossierId)
+     * Utilisée par le frontend pour avoir accès au dossierId
+     */
+    @Override
+    public org.springframework.data.domain.Page<FinanceDTO> getDossiersAvecCoutsDTO(int page, int size, String sort) {
+        org.springframework.data.domain.Page<Finance> finances = getDossiersAvecCouts(page, size, sort);
+        return financeMapper.toDTOPage(finances);
     }
     
     @Override

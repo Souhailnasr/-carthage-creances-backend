@@ -24,7 +24,7 @@ public interface FactureService {
     String genererNumeroFacture();
     Facture updateFacture(Long id, FactureDTO dto);
     void deleteFacture(Long id);
-    Double calculerMontantHT(List<Long> fluxFraisIds);
+    Double calculerMontantHT(List<Long> tarifDossierIds);
     Double calculerMontantTTC(Double montantHT, Double tauxTVA);
 }
 

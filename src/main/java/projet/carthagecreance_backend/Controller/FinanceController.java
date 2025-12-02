@@ -200,7 +200,17 @@ public class FinanceController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "dateOperation") String sort) {
         try {
-            org.springframework.data.domain.Page<Finance> pageResult = financeService.getDossiersAvecCouts(page, size, sort);
+            // ✅ Retourner FinanceDTO avec dossierId au lieu de Finance
+            org.springframework.data.domain.Page<projet.carthagecreance_backend.DTO.FinanceDTO> pageResult = 
+                financeService.getDossiersAvecCoutsDTO(page, size, sort);
+            
+            // ✅ Vérification de debug (à retirer en production si nécessaire)
+            pageResult.getContent().forEach(dto -> {
+                if (dto.getDossierId() == null) {
+                    System.out.println("⚠️ Finance " + dto.getId() + " n'a pas de dossierId");
+                }
+            });
+            
             return new ResponseEntity<>(pageResult, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
@@ -224,6 +234,146 @@ public class FinanceController {
             return new ResponseEntity<>(finance, HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        }
+    }
+    
+    // ========== NOUVEAUX ENDPOINTS POUR GESTION DES TARIFS PAR DOSSIER ==========
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.TarifDossierService tarifDossierService;
+    
+    /**
+     * GET /api/finances/dossier/{dossierId}/traitements
+     * Récupère tous les traitements d'un dossier organisés par phase
+     */
+    @GetMapping("/dossier/{dossierId}/traitements")
+    public ResponseEntity<?> getTraitementsDossier(@PathVariable Long dossierId) {
+        try {
+            projet.carthagecreance_backend.DTO.TraitementsDossierDTO dto = tarifDossierService.getTraitementsDossier(dossierId);
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * POST /api/finances/dossier/{dossierId}/tarifs
+     * Crée un nouveau tarif pour un traitement spécifique
+     */
+    @PostMapping("/dossier/{dossierId}/tarifs")
+    public ResponseEntity<?> createTarif(@PathVariable Long dossierId, 
+                                         @RequestBody projet.carthagecreance_backend.DTO.TarifDossierRequest request) {
+        try {
+            projet.carthagecreance_backend.DTO.TarifDossierDTO dto = tarifDossierService.createTarif(dossierId, request);
+            return new ResponseEntity<>(dto, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * POST /api/finances/tarifs/{tarifId}/valider
+     * Valide un tarif
+     */
+    @PostMapping("/tarifs/{tarifId}/valider")
+    public ResponseEntity<?> validerTarif(@PathVariable Long tarifId,
+                                         @RequestBody(required = false) java.util.Map<String, String> body) {
+        try {
+            String commentaire = body != null ? body.get("commentaire") : null;
+            projet.carthagecreance_backend.DTO.TarifDossierDTO dto = tarifDossierService.validerTarif(tarifId, commentaire);
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * POST /api/finances/tarifs/{tarifId}/rejeter
+     * Rejette un tarif
+     */
+    @PostMapping("/tarifs/{tarifId}/rejeter")
+    public ResponseEntity<?> rejeterTarif(@PathVariable Long tarifId,
+                                          @RequestBody java.util.Map<String, String> body) {
+        try {
+            String commentaire = body.get("commentaire");
+            if (commentaire == null || commentaire.trim().isEmpty()) {
+                return new ResponseEntity<>(java.util.Map.of("error", "Un commentaire est obligatoire pour rejeter un tarif"), 
+                    HttpStatus.BAD_REQUEST);
+            }
+            projet.carthagecreance_backend.DTO.TarifDossierDTO dto = tarifDossierService.rejeterTarif(tarifId, commentaire);
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * GET /api/finances/dossier/{dossierId}/validation-etat
+     * Récupère l'état global de validation des tarifs
+     */
+    @GetMapping("/dossier/{dossierId}/validation-etat")
+    public ResponseEntity<?> getValidationEtat(@PathVariable Long dossierId) {
+        try {
+            projet.carthagecreance_backend.DTO.ValidationEtatDTO dto = tarifDossierService.getValidationEtat(dossierId);
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * GET /api/finances/dossier/{dossierId}/detail-facture
+     * Récupère le détail de la facture avec les frais d'enquête inclus
+     */
+    @GetMapping("/dossier/{dossierId}/detail-facture")
+    public ResponseEntity<?> getDetailFactureAmeliore(@PathVariable Long dossierId) {
+        try {
+            projet.carthagecreance_backend.DTO.DetailFactureDTO dto = tarifDossierService.getDetailFacture(dossierId);
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * POST /api/finances/dossier/{dossierId}/generer-facture
+     * Génère la facture une fois tous les tarifs validés
+     */
+    @PostMapping("/dossier/{dossierId}/generer-facture")
+    public ResponseEntity<?> genererFacture(@PathVariable Long dossierId) {
+        try {
+            projet.carthagecreance_backend.DTO.FactureDTO facture = tarifDossierService.genererFacture(dossierId);
+            return new ResponseEntity<>(facture, HttpStatus.CREATED);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+    
+    /**
+     * GET /api/finances/dossier/{dossierId}/tarifs
+     * Récupère tous les tarifs d'un dossier
+     */
+    @GetMapping("/dossier/{dossierId}/tarifs")
+    public ResponseEntity<?> getTarifsByDossier(@PathVariable Long dossierId) {
+        try {
+            java.util.List<projet.carthagecreance_backend.DTO.TarifDossierDTO> tarifs = tarifDossierService.getTarifsByDossier(dossierId);
+            return new ResponseEntity<>(tarifs, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(java.util.Map.of("error", e.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

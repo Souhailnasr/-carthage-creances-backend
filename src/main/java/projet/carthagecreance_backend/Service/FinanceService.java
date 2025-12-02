@@ -40,6 +40,9 @@ public interface FinanceService {
     java.util.Map<String, Object> getStatistiquesCouts();
     java.util.Map<String, Object> getCoutsParDossier(Long dossierId);
     org.springframework.data.domain.Page<Finance> getDossiersAvecCouts(int page, int size, String sort);
+    
+    // ✅ NOUVELLE MÉTHODE : Retourne les dossiers avec coûts en DTO (avec dossierId)
+    org.springframework.data.domain.Page<projet.carthagecreance_backend.DTO.FinanceDTO> getDossiersAvecCoutsDTO(int page, int size, String sort);
     List<Finance> getFacturesEnAttente();
     Finance finaliserFacture(Long dossierId);
 }

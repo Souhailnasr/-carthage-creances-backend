@@ -9,14 +9,12 @@ import projet.carthagecreance_backend.DTO.FactureDTO;
 import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Repository.FactureRepository;
-import projet.carthagecreance_backend.Repository.FluxFraisRepository;
+import projet.carthagecreance_backend.Repository.TarifDossierRepository;
 import projet.carthagecreance_backend.Service.FactureService;
 
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -32,7 +30,7 @@ public class FactureServiceImpl implements FactureService {
     private DossierRepository dossierRepository;
 
     @Autowired
-    private FluxFraisRepository fluxFraisRepository;
+    private TarifDossierRepository tarifDossierRepository;
 
     @Override
     public Facture createFacture(FactureDTO dto) {
@@ -99,25 +97,31 @@ public class FactureServiceImpl implements FactureService {
         Dossier dossier = dossierRepository.findById(dossierId)
                 .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
 
-        // Récupérer tous les frais validés et non facturés du dossier
-        List<FluxFrais> fraisValides = fluxFraisRepository.findByDossierId(dossierId).stream()
-                .filter(f -> f.getStatut() == StatutFrais.VALIDE && f.getFacture() == null)
-                .filter(f -> {
-                    if (periodeDebut != null && periodeFin != null) {
-                        return !f.getDateAction().isBefore(periodeDebut) && !f.getDateAction().isAfter(periodeFin);
-                    }
-                    return true;
-                })
-                .collect(Collectors.toList());
+        // ✅ NOUVEAU : Récupérer les tarifs validés (TarifDossier) au lieu de FluxFrais
+        List<TarifDossier> tarifsValides = tarifDossierRepository.findByDossierIdAndStatut(
+                dossierId, StatutTarif.VALIDE);
 
-        if (fraisValides.isEmpty()) {
+        logger.info("📊 [GENERER-FACTURE] Nombre de tarifs validés trouvés: {}", tarifsValides.size());
+
+        if (tarifsValides == null || tarifsValides.isEmpty()) {
+            logger.error("❌ [GENERER-FACTURE] Aucun tarif validé trouvé pour dossier {}", dossierId);
+            
+            // Diagnostic : Vérifier tous les tarifs du dossier
+            List<TarifDossier> tousTarifs = tarifDossierRepository.findByDossierId(dossierId);
+            logger.error("📊 [GENERER-FACTURE] Tous les tarifs du dossier {}: {}", dossierId, tousTarifs.size());
+            tousTarifs.forEach(t -> logger.error("  - Tarif ID {}: phase={}, statut={}, montant={}", 
+                t.getId(), t.getPhase(), t.getStatut(), t.getMontantTotal()));
+            
             throw new RuntimeException("Aucun frais validé à facturer pour ce dossier");
         }
 
-        // Calculer le montant HT
-        Double montantHT = fraisValides.stream()
-                .mapToDouble(f -> f.getMontant() != null ? f.getMontant() : 0.0)
+        // ✅ Calculer le montant HT depuis les TarifDossier
+        Double montantHT = tarifsValides.stream()
+                .mapToDouble(t -> t.getMontantTotal() != null ? t.getMontantTotal().doubleValue() : 0.0)
                 .sum();
+
+        logger.info("💰 [GENERER-FACTURE] Montant HT calculé depuis {} tarifs: {}", 
+                tarifsValides.size(), montantHT);
 
         // Créer la facture
         Facture facture = Facture.builder()
@@ -138,14 +142,10 @@ public class FactureServiceImpl implements FactureService {
 
         facture = factureRepository.save(facture);
 
-        // Lier les frais à la facture
-        for (FluxFrais frais : fraisValides) {
-            frais.setFacture(facture);
-            frais.setStatut(StatutFrais.FACTURE);
-            fluxFraisRepository.save(frais);
-        }
+        // ✅ Note : Les TarifDossier ne sont pas modifiés car ils restent liés au dossier
+        // Le statut de validation dans Finance sera mis à jour par TarifDossierServiceImpl
 
-        logger.info("Facture générée avec succès: numero={}, montantHT={}, montantTTC={}", 
+        logger.info("✅ Facture générée avec succès: numero={}, montantHT={}, montantTTC={}", 
                 facture.getNumeroFacture(), facture.getMontantHT(), facture.getMontantTTC());
 
         return facture;
@@ -236,29 +236,36 @@ public class FactureServiceImpl implements FactureService {
                         .setFontSize(12));
             }
             
-            // Tableau des frais
-            if (facture.getFluxFrais() != null && !facture.getFluxFrais().isEmpty()) {
-                document.add(new com.itextpdf.layout.element.Paragraph("Détail des frais:")
-                        .setFontSize(14)
-                        .setBold()
-                        .setMarginTop(20));
+            // ✅ Tableau des frais depuis TarifDossier (au lieu de FluxFrais)
+            if (dossier != null) {
+                List<TarifDossier> tarifsValides = tarifDossierRepository.findByDossierIdAndStatut(
+                    dossier.getId(), StatutTarif.VALIDE);
                 
-                com.itextpdf.layout.element.Table table = new com.itextpdf.layout.element.Table(5);
-                table.addHeaderCell("Phase");
-                table.addHeaderCell("Catégorie");
-                table.addHeaderCell("Quantité");
-                table.addHeaderCell("Tarif unitaire");
-                table.addHeaderCell("Montant");
-                
-                for (FluxFrais frais : facture.getFluxFrais()) {
-                    table.addCell(frais.getPhase().toString());
-                    table.addCell(frais.getCategorie());
-                    table.addCell(String.valueOf(frais.getQuantite()));
-                    table.addCell(String.format("%.2f TND", frais.getTarifUnitaire() != null ? frais.getTarifUnitaire() : 0.0));
-                    table.addCell(String.format("%.2f TND", frais.getMontant() != null ? frais.getMontant() : 0.0));
+                if (tarifsValides != null && !tarifsValides.isEmpty()) {
+                    document.add(new com.itextpdf.layout.element.Paragraph("Détail des frais:")
+                            .setFontSize(14)
+                            .setBold()
+                            .setMarginTop(20));
+                    
+                    com.itextpdf.layout.element.Table table = new com.itextpdf.layout.element.Table(5);
+                    table.addHeaderCell("Phase");
+                    table.addHeaderCell("Catégorie");
+                    table.addHeaderCell("Quantité");
+                    table.addHeaderCell("Tarif unitaire");
+                    table.addHeaderCell("Montant");
+                    
+                    for (TarifDossier tarif : tarifsValides) {
+                        table.addCell(tarif.getPhase() != null ? tarif.getPhase().toString() : "");
+                        table.addCell(tarif.getCategorie() != null ? tarif.getCategorie() : "");
+                        table.addCell(String.valueOf(tarif.getQuantite() != null ? tarif.getQuantite() : 1));
+                        table.addCell(String.format("%.2f TND", 
+                            tarif.getCoutUnitaire() != null ? tarif.getCoutUnitaire().doubleValue() : 0.0));
+                        table.addCell(String.format("%.2f TND", 
+                            tarif.getMontantTotal() != null ? tarif.getMontantTotal().doubleValue() : 0.0));
+                    }
+                    
+                    document.add(table);
                 }
-                
-                document.add(table);
             }
             
             // Totaux
@@ -323,12 +330,13 @@ public class FactureServiceImpl implements FactureService {
     }
 
     @Override
-    public Double calculerMontantHT(List<Long> fluxFraisIds) {
-        return fluxFraisIds.stream()
-                .map(fluxFraisRepository::findById)
+    public Double calculerMontantHT(List<Long> tarifDossierIds) {
+        // ✅ MODIFIÉ : Utilise TarifDossier au lieu de FluxFrais
+        return tarifDossierIds.stream()
+                .map(tarifDossierRepository::findById)
                 .filter(Optional::isPresent)
                 .map(Optional::get)
-                .mapToDouble(f -> f.getMontant() != null ? f.getMontant() : 0.0)
+                .mapToDouble(t -> t.getMontantTotal() != null ? t.getMontantTotal().doubleValue() : 0.0)
                 .sum();
     }
 

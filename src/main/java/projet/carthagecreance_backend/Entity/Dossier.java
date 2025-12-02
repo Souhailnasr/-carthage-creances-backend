@@ -47,6 +47,17 @@ public class Dossier implements Serializable {
     @Enumerated(EnumType.STRING)
     @Column(name = "etat_dossier")
     private EtatDossier etatDossier;
+    
+    // ✅ Champs pour la prédiction IA
+    @Column(name = "etat_prediction")
+    @Enumerated(EnumType.STRING)
+    private EtatDossier etatPrediction; // État prédit par l'IA
+    
+    @Column(name = "risk_score")
+    private Double riskScore; // Score de risque (0-100)
+    
+    @Column(name = "risk_level", length = 20)
+    private String riskLevel; // Niveau de risque: "Faible", "Moyen", "Élevé"
 
     // Dates
     @Column(nullable = false, updatable = false)

@@ -74,4 +74,9 @@ public interface FinanceRepository extends JpaRepository<Finance, Long> {
     // Calculer le coût total des actions pour une finance
     @Query("SELECT COALESCE(SUM(a.nbOccurrences * a.coutUnitaire), 0) FROM Finance f JOIN f.actions a WHERE f.id = :financeId")
     Double calculerCoutTotalActions(@Param("financeId") Long financeId);
+    
+    // ✅ Charger Finance avec la relation Dossier (pour éviter LazyInitializationException)
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"dossier"})
+    @Query("SELECT f FROM Finance f")
+    org.springframework.data.domain.Page<Finance> findAllWithDossier(org.springframework.data.domain.Pageable pageable);
 }

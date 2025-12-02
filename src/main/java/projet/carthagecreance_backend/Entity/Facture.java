@@ -82,5 +82,15 @@ public class Facture implements Serializable {
         paiement.setFacture(this);
         this.paiements.add(paiement);
     }
+    
+    // ✅ Méthode utilitaire pour obtenir le dossierId (pour la sérialisation JSON)
+    public Long getDossierId() {
+        return dossier != null ? dossier.getId() : null;
+    }
+    
+    // ✅ Méthode utilitaire pour obtenir le numéro de dossier
+    public String getNumeroDossier() {
+        return dossier != null ? dossier.getNumeroDossier() : null;
+    }
 }
 
