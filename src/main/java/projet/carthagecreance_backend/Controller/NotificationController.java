@@ -1,5 +1,7 @@
 package projet.carthagecreance_backend.Controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -7,7 +9,9 @@ import projet.carthagecreance_backend.Entity.Notification;
 import projet.carthagecreance_backend.Service.NotificationService;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Contrôleur REST complet pour la gestion des notifications
@@ -22,6 +26,8 @@ import java.util.List;
 @RequestMapping({"/api/notifications", "/notifications"})
 @CrossOrigin(origins = "http://localhost:4200")
 public class NotificationController {
+
+    private static final Logger logger = LoggerFactory.getLogger(NotificationController.class);
 
     @Autowired
     private NotificationService notificationService;
@@ -375,27 +381,107 @@ public class NotificationController {
      * @return ResponseEntity avec le nombre de notifications créées (200 OK)
      */
     @PostMapping("/envoyer-multiples")
-    public ResponseEntity<java.util.Map<String, Object>> envoyerNotificationMultiples(@RequestBody java.util.Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> envoyerNotificationMultiples(@RequestBody Map<String, Object> request) {
         try {
-            @SuppressWarnings("unchecked")
-            List<Long> userIds = (List<Long>) request.get("userIds");
+            // Validation des champs requis
+            if (request.get("userIds") == null) {
+                logger.error("Erreur: userIds est manquant dans la requête");
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Le champ 'userIds' est obligatoire"));
+            }
+            
+            if (request.get("type") == null) {
+                logger.error("Erreur: type est manquant dans la requête");
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Le champ 'type' est obligatoire"));
+            }
+            
+            if (request.get("titre") == null || ((String) request.get("titre")).trim().isEmpty()) {
+                logger.error("Erreur: titre est manquant ou vide dans la requête");
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Le champ 'titre' est obligatoire"));
+            }
+            
+            if (request.get("message") == null || ((String) request.get("message")).trim().isEmpty()) {
+                logger.error("Erreur: message est manquant ou vide dans la requête");
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Le champ 'message' est obligatoire"));
+            }
+            
+            // Conversion sécurisée des userIds (gère Integer et Long)
+            List<Long> userIds = new ArrayList<>();
+            Object userIdsObj = request.get("userIds");
+            if (userIdsObj instanceof List) {
+                for (Object id : (List<?>) userIdsObj) {
+                    if (id instanceof Number) {
+                        userIds.add(((Number) id).longValue());
+                    } else {
+                        logger.error("Erreur: userId invalide dans la liste: {}", id);
+                        return ResponseEntity.badRequest()
+                            .body(Map.of("error", "Les userIds doivent être des nombres valides"));
+                    }
+                }
+            } else {
+                logger.error("Erreur: userIds n'est pas une liste valide: {}", userIdsObj);
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Le champ 'userIds' doit être une liste de nombres"));
+            }
+            
+            if (userIds.isEmpty()) {
+                logger.error("Erreur: la liste userIds est vide");
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Au moins un utilisateur doit être sélectionné"));
+            }
+            
+            // Extraction et validation des autres champs
             String typeStr = (String) request.get("type");
             String titre = (String) request.get("titre");
             String message = (String) request.get("message");
             Long entiteId = request.get("entiteId") != null ? Long.valueOf(request.get("entiteId").toString()) : null;
             String entiteTypeStr = (String) request.get("entiteType");
             
-            projet.carthagecreance_backend.Entity.TypeNotification type = 
-                projet.carthagecreance_backend.Entity.TypeNotification.valueOf(typeStr);
-            projet.carthagecreance_backend.Entity.TypeEntite entiteType = 
-                entiteTypeStr != null ? projet.carthagecreance_backend.Entity.TypeEntite.valueOf(entiteTypeStr) : null;
+            // Validation et conversion du type de notification
+            projet.carthagecreance_backend.Entity.TypeNotification type;
+            try {
+                type = projet.carthagecreance_backend.Entity.TypeNotification.valueOf(typeStr);
+            } catch (IllegalArgumentException e) {
+                logger.error("Erreur: type de notification invalide: {}", typeStr, e);
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Type de notification invalide: " + typeStr));
+            }
             
+            // Validation et conversion du type d'entité (optionnel)
+            projet.carthagecreance_backend.Entity.TypeEntite entiteType = null;
+            if (entiteTypeStr != null && !entiteTypeStr.trim().isEmpty()) {
+                try {
+                    entiteType = projet.carthagecreance_backend.Entity.TypeEntite.valueOf(entiteTypeStr);
+                } catch (IllegalArgumentException e) {
+                    logger.error("Erreur: type d'entité invalide: {}", entiteTypeStr, e);
+                    return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Type d'entité invalide: " + entiteTypeStr));
+                }
+            }
+            
+            // Envoi des notifications
             int count = notificationService.envoyerNotificationAMultiplesUtilisateurs(
                 userIds, type, titre, message, entiteId, entiteType);
             
-            return ResponseEntity.ok(java.util.Map.of("count", count));
+            logger.info("Notifications envoyées avec succès: {} notification(s) créée(s) pour {} utilisateur(s)", 
+                count, userIds.size());
+            
+            return ResponseEntity.ok(Map.of("count", count, "message", "Notifications envoyées avec succès"));
+        } catch (ClassCastException e) {
+            logger.error("Erreur de conversion de type dans la requête", e);
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Format de données invalide: " + e.getMessage()));
+        } catch (NumberFormatException e) {
+            logger.error("Erreur de format numérique dans la requête", e);
+            return ResponseEntity.badRequest()
+                .body(Map.of("error", "Format numérique invalide: " + e.getMessage()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
+            logger.error("Erreur inattendue lors de l'envoi de notifications", e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Erreur lors de l'envoi des notifications: " + e.getMessage()));
         }
     }
 

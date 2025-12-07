@@ -44,6 +44,7 @@ public class AuthenticationService {
                 .email(request.getEmail())
                 .motDePasse(passwordEncoder.encode(request.getPassword()))
                 .roleUtilisateur(request.getRole())
+                .actif(false) // Forcer actif = false pour les nouveaux utilisateurs
                 .build();
 
         var savedUser = repository.save(user);

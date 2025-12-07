@@ -8,16 +8,14 @@ import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.Repository.ActionHuissierRepository;
 import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Service.ActionHuissierService;
-import projet.carthagecreance_backend.Service.AuditLogService;
 import projet.carthagecreance_backend.Service.DossierMontantService;
 import projet.carthagecreance_backend.Service.NotificationHuissierService;
+import projet.carthagecreance_backend.Service.AutomaticNotificationService;
 import projet.carthagecreance_backend.Service.RecommendationService;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @Transactional
@@ -33,13 +31,16 @@ public class ActionHuissierServiceImpl implements ActionHuissierService {
     private DossierMontantService dossierMontantService;
     
     @Autowired
-    private AuditLogService auditLogService;
+    private NotificationHuissierService notificationHuissierService; // Gardé pour compatibilité
     
     @Autowired
-    private NotificationHuissierService notificationHuissierService;
+    private AutomaticNotificationService automaticNotificationService; // Nouveau système unifié
     
     @Autowired
     private RecommendationService recommendationService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
     
     @Override
     public ActionHuissier createAction(ActionHuissierDTO dto) {
@@ -52,28 +53,18 @@ public class ActionHuissierServiceImpl implements ActionHuissierService {
             throw new IllegalArgumentException("Le montant recouvré ne peut pas être négatif");
         }
         
-        // Mettre à jour le montant recouvré du dossier si fourni
-        if (dto.getMontantRecouvre() != null) {
-            ModeMiseAJour updateMode = dto.getUpdateMode() != null ? dto.getUpdateMode() : ModeMiseAJour.ADD;
-            dossier = dossierMontantService.updateMontantRecouvreAmiable(
-                dto.getDossierId(), 
-                dto.getMontantRecouvre(), 
-                updateMode
-            );
-        }
-        
-        // Récupérer les valeurs mises à jour du dossier
-        BigDecimal montantRestant = dossier.getMontantRestant() != null ? 
+        // Récupérer les valeurs actuelles du dossier (avant mise à jour)
+        BigDecimal montantRestantAvant = dossier.getMontantRestant() != null ? 
             BigDecimal.valueOf(dossier.getMontantRestant()) : BigDecimal.ZERO;
-        EtatDossier etatDossier = dossier.getEtatDossier();
+        EtatDossier etatDossierAvant = dossier.getEtatDossier();
         
-        // Créer l'action huissier
+        // Créer l'action huissier d'abord
         ActionHuissier action = ActionHuissier.builder()
                 .dossierId(dto.getDossierId())
                 .typeAction(dto.getTypeAction())
                 .montantRecouvre(dto.getMontantRecouvre())
-                .montantRestant(montantRestant)
-                .etatDossier(etatDossier)
+                .montantRestant(montantRestantAvant)
+                .etatDossier(etatDossierAvant)
                 .dateAction(dto.getDateAction() != null ? dto.getDateAction() : Instant.now())
                 .pieceJointeUrl(dto.getPieceJointeUrl())
                 .huissierName(dto.getHuissierName())
@@ -81,32 +72,38 @@ public class ActionHuissierServiceImpl implements ActionHuissierService {
         
         ActionHuissier saved = actionHuissierRepository.save(action);
         
-        // Créer un audit log
-        try {
-            Map<String, Object> after = new HashMap<>();
-            after.put("actionId", saved.getId());
-            after.put("typeAction", saved.getTypeAction());
-            after.put("montantRecouvre", saved.getMontantRecouvre());
-            after.put("montantRestant", saved.getMontantRestant());
-            after.put("etatDossier", saved.getEtatDossier());
-            
-            auditLogService.logChangement(
+        // ✅ Mettre à jour le montant recouvré phase juridique APRÈS création de l'action (pour avoir l'ID)
+        if (dto.getMontantRecouvre() != null && saved.getId() != null) {
+            ModeMiseAJour updateMode = dto.getUpdateMode() != null ? dto.getUpdateMode() : ModeMiseAJour.ADD;
+            dossier = dossierMontantService.updateMontantRecouvrePhaseJuridique(
                 dto.getDossierId(),
-                null,
-                TypeChangementAudit.ACTION_CREATE,
-                new HashMap<>(),
-                after,
-                "Création de l'action huissier: " + saved.getTypeAction()
+                dto.getMontantRecouvre(),
+                updateMode,
+                saved.getId(), // ID de l'action huissier créée
+                dto.getUtilisateurId(), // Passé depuis le contrôleur
+                HistoriqueRecouvrement.TypeActionRecouvrement.ACTION_HUISSIER,
+                "Recouvrement suite à action huissier: " + dto.getTypeAction()
             );
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la création de l'audit log: " + e.getMessage());
+            
+            // Mettre à jour l'action avec les nouvelles valeurs
+            saved.setMontantRestant(dossier.getMontantRestant() != null ? 
+                BigDecimal.valueOf(dossier.getMontantRestant()) : BigDecimal.ZERO);
+            saved.setEtatDossier(dossier.getEtatDossier());
+            saved = actionHuissierRepository.save(saved);
         }
         
-        // Créer une notification
+        // Créer une notification - Ancien système
         try {
             notificationHuissierService.notifyActionPerformed(saved, dossier);
         } catch (Exception e) {
-            System.err.println("Erreur lors de la notification: " + e.getMessage());
+            System.err.println("Erreur lors de la notification (ancien système): " + e.getMessage());
+        }
+        
+        // Créer une notification via le système unifié
+        try {
+            automaticNotificationService.notifierActionHuissierEffectuee(saved, dossier);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la notification unifiée: " + e.getMessage());
         }
         
         // Créer une recommandation si nécessaire
@@ -114,6 +111,13 @@ public class ActionHuissierServiceImpl implements ActionHuissierService {
             recommendationService.createRecommendationForAction(saved, dossier);
         } catch (Exception e) {
             System.err.println("Erreur lors de la création de la recommandation: " + e.getMessage());
+        }
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            System.err.println("Erreur lors du recalcul automatique des statistiques après création d'action huissier: " + e.getMessage());
         }
         
         return saved;

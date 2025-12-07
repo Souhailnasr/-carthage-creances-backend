@@ -40,7 +40,7 @@ public class Utilisateur implements UserDetails {
     private String motDePasse;
 
     @Builder.Default
-    private Boolean actif = true;
+    private Boolean actif = false; // Par défaut, les nouveaux utilisateurs sont inactifs jusqu'à leur première connexion
 
 
     @Column(nullable = false, updatable = false)
@@ -129,6 +129,24 @@ public class Utilisateur implements UserDetails {
     @Builder.Default
     @JsonIgnore // Évite la récursion infinie
     private List<PerformanceAgent> performances = new ArrayList<>();
+    
+    /**
+     * Utilisateur qui a créé cet utilisateur (chef créateur)
+     * Nullable pour les utilisateurs existants et SUPER_ADMIN
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "createur_id", nullable = true)
+    @JsonIgnore // Évite la récursion infinie dans les réponses JSON
+    private Utilisateur createur;
+    
+    /**
+     * Liste des utilisateurs créés par cet utilisateur (si c'est un chef)
+     */
+    @OneToMany(mappedBy = "createur", fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonIgnore // Évite la récursion infinie
+    private List<Utilisateur> utilisateursCrees = new ArrayList<>();
+    
     // Initialiser la date de création automatiquement
     @PrePersist
     protected void onCreate() {

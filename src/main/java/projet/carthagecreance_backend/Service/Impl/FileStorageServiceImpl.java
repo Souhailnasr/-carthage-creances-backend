@@ -29,7 +29,7 @@ public class FileStorageServiceImpl implements FileStorageService {
     @Value("${file.base-url:http://localhost:8089/carthage-creance/api/files}")
     private String baseUrl;
     
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    private static final long MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
     private static final List<String> ALLOWED_CONTENT_TYPES = Arrays.asList(
         "application/pdf",
         "image/jpeg",
@@ -120,7 +120,7 @@ public class FileStorageServiceImpl implements FileStorageService {
         
         // Vérifier la taille
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new IllegalArgumentException("Le fichier est trop volumineux. Taille maximale : 10MB");
+            throw new IllegalArgumentException("Le fichier est trop volumineux. Taille maximale : 20MB");
         }
         
         // Vérifier le type

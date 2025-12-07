@@ -2,6 +2,7 @@ package projet.carthagecreance_backend.Controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -36,35 +37,47 @@ public class HuissierDocumentController {
      * POST /api/huissier/document
      * 
      * Compatible avec deux formats :
-     * 1. JSON avec DocumentHuissierDTO (ancien format)
-     * 2. Form-data avec MultipartFile (nouveau format)
+     * 1. JSON avec DocumentHuissierDTO (sans fichier)
+     * 2. multipart/form-data avec @RequestPart (avec fichier)
      */
-    @PostMapping("/document")
+    @PostMapping(value = "/document", consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
     public ResponseEntity<?> createDocument(
-            @RequestParam(value = "dossierId", required = false) Long dossierId,
-            @RequestParam(value = "typeDocument", required = false) String typeDocumentStr,
-            @RequestParam(value = "huissierName", required = false) String huissierName,
-            @RequestParam(value = "delaiLegalDays", required = false) Integer delaiLegalDays,
-            @RequestParam(value = "pieceJointe", required = false) MultipartFile file,
-            @RequestBody(required = false) DocumentHuissierDTO dto
+            @RequestPart(value = "dto", required = false) DocumentHuissierDTO dto,
+            @RequestPart(value = "dossierId", required = false) String dossierIdStr,
+            @RequestPart(value = "typeDocument", required = false) String typeDocumentStr,
+            @RequestPart(value = "huissierName", required = false) String huissierName,
+            @RequestPart(value = "delaiLegalDays", required = false) String delaiLegalDaysStr,
+            @RequestPart(value = "pieceJointe", required = false) MultipartFile pieceJointe
     ) {
         try {
             DocumentHuissierDTO finalDto;
             
-            // Si des paramètres de formulaire sont fournis, utiliser le nouveau format
-            if (dossierId != null || typeDocumentStr != null || huissierName != null) {
+            // Si dto est fourni (JSON), l'utiliser directement
+            if (dto != null) {
+                finalDto = dto;
+            } else if (dossierIdStr != null || typeDocumentStr != null || huissierName != null) {
+                // Sinon, construire depuis les paramètres multipart
                 // Validation des paramètres requis
-                if (dossierId == null) {
+                if (dossierIdStr == null || dossierIdStr.trim().isEmpty()) {
                     return ResponseEntity.badRequest()
                             .body(Map.of("error", "dossierId est requis"));
                 }
-                if (typeDocumentStr == null) {
+                if (typeDocumentStr == null || typeDocumentStr.trim().isEmpty()) {
                     return ResponseEntity.badRequest()
                             .body(Map.of("error", "typeDocument est requis"));
                 }
                 if (huissierName == null || huissierName.trim().isEmpty()) {
                     return ResponseEntity.badRequest()
                             .body(Map.of("error", "huissierName est requis"));
+                }
+                
+                // Convertir dossierId
+                Long dossierId;
+                try {
+                    dossierId = Long.parseLong(dossierIdStr);
+                } catch (NumberFormatException e) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "dossierId doit être un nombre valide"));
                 }
                 
                 // Convertir le typeDocument
@@ -76,6 +89,17 @@ public class HuissierDocumentController {
                             .body(Map.of("error", "Type de document invalide: " + typeDocumentStr));
                 }
                 
+                // Convertir delaiLegalDays si fourni
+                Integer delaiLegalDays = null;
+                if (delaiLegalDaysStr != null && !delaiLegalDaysStr.trim().isEmpty()) {
+                    try {
+                        delaiLegalDays = Integer.parseInt(delaiLegalDaysStr);
+                    } catch (NumberFormatException e) {
+                        return ResponseEntity.badRequest()
+                                .body(Map.of("error", "delaiLegalDays doit être un nombre valide"));
+                    }
+                }
+                
                 // Créer le DTO
                 finalDto = DocumentHuissierDTO.builder()
                         .dossierId(dossierId)
@@ -83,24 +107,24 @@ public class HuissierDocumentController {
                         .huissierName(huissierName)
                         .delaiLegalDays(delaiLegalDays)
                         .build();
-                
-                // Gérer le fichier si présent
-                if (file != null && !file.isEmpty()) {
-                    try {
-                        fileStorageService.validateFile(file);
-                        String fileUrl = fileStorageService.storeFile(file, "huissier/documents");
-                        finalDto.setPieceJointeUrl(fileUrl);
-                    } catch (IllegalArgumentException e) {
-                        return ResponseEntity.badRequest()
-                                .body(Map.of("error", e.getMessage()));
-                    }
-                }
-            } else if (dto != null) {
-                // Utiliser l'ancien format (JSON)
-                finalDto = dto;
             } else {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Données manquantes. Utilisez soit form-data soit JSON"));
+                        .body(Map.of("error", "Données manquantes. Utilisez soit JSON (dto) soit multipart/form-data"));
+            }
+            
+            // Traiter le fichier si présent (pour les deux formats)
+            if (pieceJointe != null && !pieceJointe.isEmpty()) {
+                try {
+                    fileStorageService.validateFile(pieceJointe);
+                    String fileUrl = fileStorageService.storeFile(pieceJointe, "huissier/documents");
+                    finalDto.setPieceJointeUrl(fileUrl);
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", e.getMessage()));
+                } catch (Exception e) {
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(Map.of("error", "Erreur lors de la sauvegarde du fichier: " + e.getMessage()));
+                }
             }
             
             // Validation finale

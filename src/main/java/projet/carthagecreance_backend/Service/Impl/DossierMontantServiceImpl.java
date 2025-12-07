@@ -6,14 +6,12 @@ import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.DTO.MontantDossierDTO;
 import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.Repository.DossierRepository;
-import projet.carthagecreance_backend.Service.AuditLogService;
+import projet.carthagecreance_backend.Repository.HistoriqueRecouvrementRepository;
 import projet.carthagecreance_backend.Service.DossierMontantService;
 import projet.carthagecreance_backend.Service.NotificationService;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.LocalDateTime;
 
 @Service
 @Transactional
@@ -23,7 +21,7 @@ public class DossierMontantServiceImpl implements DossierMontantService {
     private DossierRepository dossierRepository;
     
     @Autowired
-    private AuditLogService auditLogService;
+    private HistoriqueRecouvrementRepository historiqueRecouvrementRepository;
     
     @Autowired
     private NotificationService notificationService;
@@ -32,13 +30,6 @@ public class DossierMontantServiceImpl implements DossierMontantService {
     public Dossier updateMontants(Long dossierId, MontantDossierDTO dto) {
         Dossier dossier = dossierRepository.findById(dossierId)
                 .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
-        
-        // Sauvegarder l'état avant
-        Map<String, Object> before = new HashMap<>();
-        before.put("montantTotal", dossier.getMontantTotal());
-        before.put("montantRecouvre", dossier.getMontantRecouvre());
-        before.put("montantRestant", dossier.getMontantRestant());
-        before.put("etatDossier", dossier.getEtatDossier());
         
         // Mettre à jour montantTotal si fourni
         if (dto.getMontantTotal() != null) {
@@ -67,28 +58,6 @@ public class DossierMontantServiceImpl implements DossierMontantService {
         
         // Recalculer montantRestant et état
         dossier = recalculerMontantRestantEtEtat(dossier);
-        
-        // Sauvegarder l'état après
-        Map<String, Object> after = new HashMap<>();
-        after.put("montantTotal", dossier.getMontantTotal());
-        after.put("montantRecouvre", dossier.getMontantRecouvre());
-        after.put("montantRestant", dossier.getMontantRestant());
-        after.put("etatDossier", dossier.getEtatDossier());
-        
-        // Créer un audit log
-        try {
-            auditLogService.logChangement(
-                dossierId,
-                null, // userId sera récupéré depuis le contexte de sécurité
-                TypeChangementAudit.AMOUNT_UPDATE,
-                before,
-                after,
-                "Mise à jour des montants du dossier"
-            );
-        } catch (Exception e) {
-            // Logger l'erreur mais ne pas faire échouer la mise à jour
-            System.err.println("Erreur lors de la création de l'audit log: " + e.getMessage());
-        }
         
         return dossierRepository.save(dossier);
     }
@@ -144,6 +113,127 @@ public class DossierMontantServiceImpl implements DossierMontantService {
         } else {
             dossier.setEtatDossier(EtatDossier.NOT_RECOVERED);
         }
+        
+        return dossier;
+    }
+    
+    @Override
+    public Dossier updateMontantRecouvrePhaseAmiable(
+            Long dossierId, 
+            BigDecimal montantRecouvre, 
+            ModeMiseAJour updateMode,
+            Long actionId,
+            Long utilisateurId,
+            String commentaire) {
+        
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Récupérer le montant déjà recouvré en phase amiable
+        BigDecimal montantDejaRecouvrePhaseAmiable = dossier.getMontantRecouvrePhaseAmiable() != null ?
+                BigDecimal.valueOf(dossier.getMontantRecouvrePhaseAmiable()) : BigDecimal.ZERO;
+        
+        // Calculer le nouveau montant recouvré phase amiable
+        BigDecimal nouveauMontantPhaseAmiable;
+        if (updateMode == ModeMiseAJour.ADD) {
+            nouveauMontantPhaseAmiable = montantDejaRecouvrePhaseAmiable.add(montantRecouvre);
+        } else {
+            nouveauMontantPhaseAmiable = montantRecouvre;
+        }
+        
+        // Mettre à jour le montant recouvré phase amiable
+        dossier.setMontantRecouvrePhaseAmiable(nouveauMontantPhaseAmiable.doubleValue());
+        
+        // Calculer le montant total recouvré (amiable + juridique)
+        BigDecimal montantRecouvrePhaseJuridique = dossier.getMontantRecouvrePhaseJuridique() != null ?
+                BigDecimal.valueOf(dossier.getMontantRecouvrePhaseJuridique()) : BigDecimal.ZERO;
+        BigDecimal montantTotalRecouvre = nouveauMontantPhaseAmiable.add(montantRecouvrePhaseJuridique);
+        
+        // Mettre à jour le montant recouvré total
+        dossier.setMontantRecouvre(montantTotalRecouvre.doubleValue());
+        
+        // Recalculer montantRestant et état
+        dossier = recalculerMontantRestantEtEtat(dossier);
+        
+        // Sauvegarder le dossier
+        dossier = dossierRepository.save(dossier);
+        
+        // Créer l'entrée d'historique
+        HistoriqueRecouvrement historique = HistoriqueRecouvrement.builder()
+                .dossierId(dossierId)
+                .phase(HistoriqueRecouvrement.PhaseRecouvrement.AMIABLE)
+                .montantRecouvre(montantRecouvre)
+                .montantTotalRecouvre(montantTotalRecouvre)
+                .montantRestant(BigDecimal.valueOf(dossier.getMontantRestant()))
+                .typeAction(HistoriqueRecouvrement.TypeActionRecouvrement.ACTION_AMIABLE)
+                .actionId(actionId)
+                .utilisateurId(utilisateurId)
+                .dateEnregistrement(LocalDateTime.now())
+                .commentaire(commentaire)
+                .build();
+        
+        historiqueRecouvrementRepository.save(historique);
+        
+        return dossier;
+    }
+    
+    @Override
+    public Dossier updateMontantRecouvrePhaseJuridique(
+            Long dossierId,
+            BigDecimal montantRecouvre,
+            ModeMiseAJour updateMode,
+            Long actionId,
+            Long utilisateurId,
+            HistoriqueRecouvrement.TypeActionRecouvrement typeAction,
+            String commentaire) {
+        
+        Dossier dossier = dossierRepository.findById(dossierId)
+                .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Récupérer le montant déjà recouvré en phase juridique
+        BigDecimal montantDejaRecouvrePhaseJuridique = dossier.getMontantRecouvrePhaseJuridique() != null ?
+                BigDecimal.valueOf(dossier.getMontantRecouvrePhaseJuridique()) : BigDecimal.ZERO;
+        
+        // Calculer le nouveau montant recouvré phase juridique
+        BigDecimal nouveauMontantPhaseJuridique;
+        if (updateMode == ModeMiseAJour.ADD) {
+            nouveauMontantPhaseJuridique = montantDejaRecouvrePhaseJuridique.add(montantRecouvre);
+        } else {
+            nouveauMontantPhaseJuridique = montantRecouvre;
+        }
+        
+        // Mettre à jour le montant recouvré phase juridique
+        dossier.setMontantRecouvrePhaseJuridique(nouveauMontantPhaseJuridique.doubleValue());
+        
+        // Calculer le montant total recouvré (amiable + juridique)
+        BigDecimal montantRecouvrePhaseAmiable = dossier.getMontantRecouvrePhaseAmiable() != null ?
+                BigDecimal.valueOf(dossier.getMontantRecouvrePhaseAmiable()) : BigDecimal.ZERO;
+        BigDecimal montantTotalRecouvre = montantRecouvrePhaseAmiable.add(nouveauMontantPhaseJuridique);
+        
+        // Mettre à jour le montant recouvré total
+        dossier.setMontantRecouvre(montantTotalRecouvre.doubleValue());
+        
+        // Recalculer montantRestant et état
+        dossier = recalculerMontantRestantEtEtat(dossier);
+        
+        // Sauvegarder le dossier
+        dossier = dossierRepository.save(dossier);
+        
+        // Créer l'entrée d'historique
+        HistoriqueRecouvrement historique = HistoriqueRecouvrement.builder()
+                .dossierId(dossierId)
+                .phase(HistoriqueRecouvrement.PhaseRecouvrement.JURIDIQUE)
+                .montantRecouvre(montantRecouvre)
+                .montantTotalRecouvre(montantTotalRecouvre)
+                .montantRestant(BigDecimal.valueOf(dossier.getMontantRestant()))
+                .typeAction(typeAction)
+                .actionId(actionId)
+                .utilisateurId(utilisateurId)
+                .dateEnregistrement(LocalDateTime.now())
+                .commentaire(commentaire)
+                .build();
+        
+        historiqueRecouvrementRepository.save(historique);
         
         return dossier;
     }

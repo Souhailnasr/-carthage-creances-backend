@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Service.Impl;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import projet.carthagecreance_backend.Repository.AvocatRepository;
 import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Repository.HuissierRepository;
 import projet.carthagecreance_backend.Service.AudienceService;
+import projet.carthagecreance_backend.Event.DossierDataChangedEvent;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -41,6 +43,12 @@ public class AudienceServiceImpl implements AudienceService {
     
     @Autowired
     private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
+    
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
 
     @Override
     @Transactional
@@ -55,9 +63,19 @@ public class AudienceServiceImpl implements AudienceService {
                 if (savedAudience.getDateProchaine() != null) {
                     automaticNotificationService.notifierAudienceProchaine(savedAudience, savedAudience.getDossier());
                 }
+                
+                // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+                eventPublisher.publishEvent(new DossierDataChangedEvent(this, savedAudience.getDossier().getId(), "AUDIENCE"));
             }
         } catch (Exception e) {
             logger.warn("Erreur lors de la notification automatique de création d'audience: {}", e.getMessage());
+        }
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après création d'audience: {}", e.getMessage());
         }
         
         return savedAudience;
@@ -125,6 +143,9 @@ public class AudienceServiceImpl implements AudienceService {
                 if (savedAudience.getDateProchaine() != null) {
                     automaticNotificationService.notifierAudienceProchaine(savedAudience, savedAudience.getDossier());
                 }
+                
+                // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+                eventPublisher.publishEvent(new DossierDataChangedEvent(this, savedAudience.getDossier().getId(), "AUDIENCE"));
             }
         } catch (Exception e) {
             logger.warn("Erreur lors de la notification automatique de création d'audience: {}", e.getMessage());
@@ -179,7 +200,25 @@ public class AudienceServiceImpl implements AudienceService {
             audience.setHuissier(null); // Retirer l'huissier si null
         }
         
-        return audienceRepository.save(audience);
+        Audience savedAudience = audienceRepository.save(audience);
+        
+        // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+        try {
+            if (savedAudience.getDossier() != null) {
+                eventPublisher.publishEvent(new DossierDataChangedEvent(this, savedAudience.getDossier().getId(), "AUDIENCE"));
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la publication de l'événement de changement de données: {}", e.getMessage());
+        }
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après modification d'audience depuis DTO: {}", e.getMessage());
+        }
+        
+        return savedAudience;
     }
 
     @Override
@@ -196,7 +235,25 @@ public class AudienceServiceImpl implements AudienceService {
     public Audience updateAudience(Long id, Audience audience) {
         if (audienceRepository.existsById(id)) {
             audience.setId(id);
-            return audienceRepository.save(audience);
+            Audience savedAudience = audienceRepository.save(audience);
+            
+            // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+            try {
+                if (savedAudience.getDossier() != null) {
+                    eventPublisher.publishEvent(new DossierDataChangedEvent(this, savedAudience.getDossier().getId(), "AUDIENCE"));
+                }
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la publication de l'événement de changement de données: {}", e.getMessage());
+            }
+            
+            // Recalcul automatique des statistiques (asynchrone)
+            try {
+                statistiqueService.recalculerStatistiquesAsync();
+            } catch (Exception e) {
+                logger.warn("Erreur lors du recalcul automatique des statistiques après modification d'audience: {}", e.getMessage());
+            }
+            
+            return savedAudience;
         }
         throw new RuntimeException("Audience not found with id: " + id);
     }

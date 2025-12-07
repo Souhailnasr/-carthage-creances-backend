@@ -11,6 +11,7 @@ import projet.carthagecreance_backend.Repository.*;
 import projet.carthagecreance_backend.SecurityConfig.JwtService;
 import projet.carthagecreance_backend.Service.UtilisateurService;
 import projet.carthagecreance_backend.Service.NotificationService;
+import projet.carthagecreance_backend.Service.AutomaticNotificationService;
 import projet.carthagecreance_backend.Service.TacheUrgenteService;
 import projet.carthagecreance_backend.Service.PerformanceAgentService;
 
@@ -35,6 +36,9 @@ public class UtilisateurServiceImpl implements UtilisateurService {
 
     @Autowired
     private NotificationService notificationService;
+    
+    @Autowired
+    private AutomaticNotificationService automaticNotificationService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -50,13 +54,16 @@ public class UtilisateurServiceImpl implements UtilisateurService {
 
     @Autowired
     private PerformanceAgentService performanceAgentService;
+    
+    @Autowired
+    private PasswordResetTokenRepository passwordResetTokenRepository;
 
     /**
      * Crée un nouvel utilisateur avec validation des rôles
      * Vérifie les droits de création et envoie des notifications
      */
     @Override
-    public AuthenticationResponse createUtilisateur(Utilisateur utilisateur) {
+    public AuthenticationResponse createUtilisateur(Utilisateur utilisateur, Utilisateur createur) {
         try {
             System.out.println("===== DÉBUT createUtilisateur =====");
             System.out.println("Email: " + utilisateur.getEmail());
@@ -77,6 +84,24 @@ public class UtilisateurServiceImpl implements UtilisateurService {
             System.out.println("Mot de passe crypté: " + encodedPassword);
             utilisateur.setMotDePasse(encodedPassword);
 
+            // 3.5. Forcer actif = false pour les nouveaux utilisateurs (indépendamment de ce que le frontend envoie)
+            // Le statut actif sera calculé automatiquement par calculerStatutActif() basé sur les dates de connexion/déconnexion
+            utilisateur.setActif(false);
+            System.out.println("Statut actif forcé à false pour le nouvel utilisateur");
+
+            // ✅ 3.6. Définir le créateur (si fourni et si ce n'est pas un SUPER_ADMIN)
+            if (createur != null && createur.getId() != null) {
+                // Ne pas définir de créateur pour les SUPER_ADMIN
+                if (utilisateur.getRoleUtilisateur() != RoleUtilisateur.SUPER_ADMIN) {
+                    utilisateur.setCreateur(createur);
+                    System.out.println("Créateur défini: " + createur.getEmail() + " (ID: " + createur.getId() + ")");
+                } else {
+                    System.out.println("SUPER_ADMIN créé sans créateur (auto-créé)");
+                }
+            } else {
+                System.out.println("Aucun créateur fourni (peut être normal pour SUPER_ADMIN ou utilisateurs existants)");
+            }
+
             // 4. Sauvegarder l'utilisateur
             Utilisateur savedUtilisateur = utilisateurRepository.save(utilisateur);
             System.out.println("Utilisateur sauvegardé avec ID: " + savedUtilisateur.getId());
@@ -87,18 +112,10 @@ public class UtilisateurServiceImpl implements UtilisateurService {
             saveUserToken(savedUtilisateur, jwtToken);
             System.out.println("Token sauvegardé");
 
-            // 6. Envoyer une notification de création (optionnel, peut causer des erreurs)
+            // 6. Envoyer une notification de création via AutomaticNotificationService
             try {
-                Notification notification = Notification.builder()
-                        .utilisateur(savedUtilisateur)
-                        .titre("Compte créé avec succès")
-                        .message("Votre compte a été créé avec le rôle: " + savedUtilisateur.getRoleUtilisateur())
-                        .type(TypeNotification.INFO)
-                        .entiteId(savedUtilisateur.getId())
-                        .entiteType(TypeEntite.UTILISATEUR)
-                        .dateCreation(LocalDateTime.now())
-                        .build();
-                notificationService.createNotification(notification);
+                // Utiliser le créateur passé en paramètre
+                automaticNotificationService.notifierCreationUtilisateur(savedUtilisateur, createur);
             } catch (Exception e) {
                 System.out.println("Erreur lors de la création de la notification (non bloquant): " + e.getMessage());
             }
@@ -238,16 +255,25 @@ public class UtilisateurServiceImpl implements UtilisateurService {
     public void deleteUtilisateur(Long id) {
         Optional<Utilisateur> utilisateur = utilisateurRepository.findById(id);
         if (utilisateur.isPresent()) {
-            // Vérifier s'il y a des performances associées
+            // ✅ Supprimer toutes les performances associées
             List<PerformanceAgent> performances = performanceAgentRepository.findByAgentId(id);
             if (!performances.isEmpty()) {
-                throw new RuntimeException("Impossible de supprimer l'utilisateur: des performances sont associées");
+                performanceAgentRepository.deleteAll(performances);
             }
 
-            // Vérifier s'il y a des tâches urgentes associées
-            // (à implémenter selon votre logique métier)
+            // ✅ Supprimer tous les tokens JWT de session associés
+            List<Token> jwtTokens = tokenRepository.findAllByUserId(id);
+            if (!jwtTokens.isEmpty()) {
+                tokenRepository.deleteAll(jwtTokens);
+            }
+            
+            // ✅ Supprimer tous les tokens de réinitialisation de mot de passe associés
+            List<PasswordResetToken> passwordResetTokens = passwordResetTokenRepository.findByUtilisateur(utilisateur.get());
+            if (!passwordResetTokens.isEmpty()) {
+                passwordResetTokenRepository.deleteAll(passwordResetTokens);
+            }
 
-            // Supprimer l'utilisateur
+            // ✅ Supprimer l'utilisateur
             utilisateurRepository.deleteById(id);
 
             // Envoyer une notification de suppression
@@ -467,20 +493,9 @@ public class UtilisateurServiceImpl implements UtilisateurService {
 
         List<Utilisateur> agents;
 
-        if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER) {
-            // Chef dossier : uniquement les agents dossier
-            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_DOSSIER);
-        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE) {
-            // Chef amiable : uniquement les agents amiable
-            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
-        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE) {
-            // Chef juridique : uniquement les agents juridique
-            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
-        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_FINANCE) {
-            // Chef finance : uniquement les agents finance
-            agents = utilisateurRepository.findByRoleUtilisateur(RoleUtilisateur.AGENT_FINANCE);
-        } else if (chefRole == RoleUtilisateur.SUPER_ADMIN) {
-            // Pour SUPER_ADMIN, retourner tous les agents
+        // ✅ NOUVEAU : SUPER_ADMIN voit tous les utilisateurs (pas de filtre par créateur)
+        if (chefRole == RoleUtilisateur.SUPER_ADMIN) {
+            // Pour SUPER_ADMIN, retourner tous les agents (tous les rôles agents)
             agents = utilisateurRepository.findByRoleUtilisateurIn(
                     java.util.Arrays.asList(
                             RoleUtilisateur.AGENT_DOSSIER,
@@ -489,6 +504,18 @@ public class UtilisateurServiceImpl implements UtilisateurService {
                             RoleUtilisateur.AGENT_FINANCE
                     )
             );
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER) {
+            // ✅ NOUVEAU : Chef dossier : uniquement les agents dossier créés par ce chef
+            agents = utilisateurRepository.findByCreateurIdAndRoleUtilisateur(chefId, RoleUtilisateur.AGENT_DOSSIER);
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE) {
+            // ✅ NOUVEAU : Chef amiable : uniquement les agents amiable créés par ce chef
+            agents = utilisateurRepository.findByCreateurIdAndRoleUtilisateur(chefId, RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE) {
+            // ✅ NOUVEAU : Chef juridique : uniquement les agents juridique créés par ce chef
+            agents = utilisateurRepository.findByCreateurIdAndRoleUtilisateur(chefId, RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
+        } else if (chefRole == RoleUtilisateur.CHEF_DEPARTEMENT_FINANCE) {
+            // ✅ NOUVEAU : Chef finance : uniquement les agents finance créés par ce chef
+            agents = utilisateurRepository.findByCreateurIdAndRoleUtilisateur(chefId, RoleUtilisateur.AGENT_FINANCE);
         } else {
             // Pour les autres rôles, retourner une liste vide
             agents = java.util.Collections.emptyList();

@@ -154,4 +154,26 @@ public interface TacheUrgenteService {
      * @return Nombre de tâches correspondantes
      */
     long countTachesByAgentAndStatut(Long agentId, StatutTache statut);
+    
+    /**
+     * Récupère les tâches créées par un chef
+     * @param chefId L'ID du chef
+     * @return Liste des tâches créées par le chef
+     */
+    List<TacheUrgente> getTachesByChef(Long chefId);
+    
+    /**
+     * Récupère les tâches par agent et statut
+     * @param agentId L'ID de l'agent
+     * @param statut Le statut des tâches
+     * @return Liste des tâches correspondantes
+     */
+    List<TacheUrgente> getTachesByAgentAndStatut(Long agentId, StatutTache statut);
+    
+    /**
+     * Récupère les tâches par type
+     * @param type Le type de tâche
+     * @return Liste des tâches avec ce type
+     */
+    List<TacheUrgente> getTachesByType(projet.carthagecreance_backend.Entity.TypeTache type);
 }

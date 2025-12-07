@@ -39,6 +39,14 @@ public class DossierResponseDTO {
     private TypeDocumentJustificatif typeDocumentJustificatif;
     private TypeRecouvrement typeRecouvrement;
     
+    // Champs pour le recouvrement
+    private Double montantTotal;
+    private Double montantRecouvre;
+    private Double montantRecouvrePhaseAmiable;  // ✅ NOUVEAU
+    private Double montantRecouvrePhaseJuridique; // ✅ NOUVEAU
+    private Double montantRestant;
+    private EtatDossier etatDossier;
+    
     // Informations simplifiées de l'avocat (sans la liste de dossiers)
     private AvocatInfo avocat;
     
@@ -165,6 +173,12 @@ public class DossierResponseDTO {
                 .statut(dossier.getStatut())
                 .typeDocumentJustificatif(dossier.getTypeDocumentJustificatif())
                 .typeRecouvrement(dossier.getTypeRecouvrement())
+                .montantTotal(dossier.getMontantTotal())
+                .montantRecouvre(dossier.getMontantRecouvre())
+                .montantRecouvrePhaseAmiable(dossier.getMontantRecouvrePhaseAmiable())
+                .montantRecouvrePhaseJuridique(dossier.getMontantRecouvrePhaseJuridique())
+                .montantRestant(dossier.getMontantRestant())
+                .etatDossier(dossier.getEtatDossier())
                 .valide(dossier.getValide())
                 .dateValidation(dossier.getDateValidation())
                 .commentaireValidation(dossier.getCommentaireValidation());

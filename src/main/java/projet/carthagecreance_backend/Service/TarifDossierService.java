@@ -56,5 +56,25 @@ public interface TarifDossierService {
      * Récupère tous les tarifs d'un dossier
      */
     List<TarifDossierDTO> getTarifsByDossier(Long dossierId);
+    
+    /**
+     * Crée automatiquement le tarif de création (250 TND) - utilisé lors de la validation du dossier
+     */
+    TarifDossier createTarifCreationAutomatique(projet.carthagecreance_backend.Entity.Dossier dossier);
+    
+    /**
+     * Crée automatiquement le tarif d'enquête (300 TND) - utilisé lors de la validation de l'enquête
+     */
+    TarifDossier createTarifEnqueteAutomatique(projet.carthagecreance_backend.Entity.Dossier dossier, projet.carthagecreance_backend.Entity.Enquette enquete);
+    
+    /**
+     * Crée automatiquement l'avance sur frais de recouvrement judiciaire (1000 TND)
+     */
+    TarifDossier createAvanceRecouvrementJuridique(projet.carthagecreance_backend.Entity.Dossier dossier);
+    
+    /**
+     * Crée un tarif pour l'attestation de carence (500 TND) - Manuel
+     */
+    TarifDossier createTarifAttestationCarence(Long dossierId, String commentaire);
 }
 

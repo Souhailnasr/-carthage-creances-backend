@@ -3,6 +3,7 @@ package projet.carthagecreance_backend.Service.Impl;
 import org.springframework.stereotype.Service;
 import projet.carthagecreance_backend.Entity.*;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -22,6 +23,7 @@ public class IaFeatureBuilderService {
      * @param actions Les actions associées (peut être null ou vide)
      * @param audiences Les audiences associées (peut être null ou vide)
      * @param actionsHuissier Les actions huissier associées (peut être null ou vide)
+     * @param documentsHuissier Les documents huissier associés (peut être null ou vide)
      * @return Map contenant les features pour la prédiction
      */
     public Map<String, Object> buildFeaturesFromRealData(
@@ -29,7 +31,8 @@ public class IaFeatureBuilderService {
             Enquette enquete,
             List<Action> actions,
             List<Audience> audiences,
-            List<ActionHuissier> actionsHuissier) {
+            List<ActionHuissier> actionsHuissier,
+            List<DocumentHuissier> documentsHuissier) {
         
         Map<String, Object> features = new HashMap<>();
         
@@ -300,6 +303,82 @@ public class IaFeatureBuilderService {
             features.put("nbActionsHuissier_ACLA_TAW9IFIYA", 0.0);
             features.put("nbActionsHuissier_ACLA_A9ARYA", 0.0);
             features.put("tauxReussiteActionsHuissier", 0.0);
+        }
+        
+        // ========== Features des Documents Huissier ==========
+        if (documentsHuissier != null && !documentsHuissier.isEmpty()) {
+            int nbDocumentsHuissierTotal = documentsHuissier.size();
+            
+            // Compter par type de document
+            Map<TypeDocumentHuissier, Integer> documentsParType = new HashMap<>();
+            
+            // Compter par statut
+            int nbDocumentsPending = 0;
+            int nbDocumentsExpired = 0;
+            int nbDocumentsCompleted = 0;
+            
+            // Calculer le nombre de jours depuis le premier document
+            long joursDepuisPremierDocument = 0;
+            if (!documentsHuissier.isEmpty()) {
+                Instant premierDocumentDate = documentsHuissier.stream()
+                    .map(DocumentHuissier::getDateCreation)
+                    .min(Instant::compareTo)
+                    .orElse(Instant.now());
+                joursDepuisPremierDocument = java.time.Duration.between(premierDocumentDate, Instant.now()).toDays();
+            }
+            
+            for (DocumentHuissier document : documentsHuissier) {
+                // Compter par type
+                if (document.getTypeDocument() != null) {
+                    documentsParType.put(
+                        document.getTypeDocument(),
+                        documentsParType.getOrDefault(document.getTypeDocument(), 0) + 1
+                    );
+                }
+                
+                // Compter par statut
+                if (document.getStatus() != null) {
+                    if (document.getStatus() == StatutDocumentHuissier.PENDING) {
+                        nbDocumentsPending++;
+                    } else if (document.getStatus() == StatutDocumentHuissier.EXPIRED) {
+                        nbDocumentsExpired++;
+                    } else if (document.getStatus() == StatutDocumentHuissier.COMPLETED) {
+                        nbDocumentsCompleted++;
+                    }
+                }
+            }
+            
+            features.put("nbDocumentsHuissierTotal", (double) nbDocumentsHuissierTotal);
+            features.put("nbDocumentsHuissierPending", (double) nbDocumentsPending);
+            features.put("nbDocumentsHuissierExpired", (double) nbDocumentsExpired);
+            features.put("nbDocumentsHuissierCompleted", (double) nbDocumentsCompleted);
+            features.put("joursDepuisPremierDocumentHuissier", (double) joursDepuisPremierDocument);
+            
+            // Features par type de document
+            features.put("nbDocumentsHuissier_PV_MISE_EN_DEMEURE", 
+                (double) documentsParType.getOrDefault(TypeDocumentHuissier.PV_MISE_EN_DEMEURE, 0));
+            features.put("nbDocumentsHuissier_ORDONNANCE_PAIEMENT", 
+                (double) documentsParType.getOrDefault(TypeDocumentHuissier.ORDONNANCE_PAIEMENT, 0));
+            features.put("nbDocumentsHuissier_PV_NOTIFICATION_ORDONNANCE", 
+                (double) documentsParType.getOrDefault(TypeDocumentHuissier.PV_NOTIFICATION_ORDONNANCE, 0));
+            
+            // Taux de complétion des documents
+            double tauxCompletionDocuments = nbDocumentsHuissierTotal > 0 
+                ? (double) nbDocumentsCompleted / nbDocumentsHuissierTotal 
+                : 0.0;
+            features.put("tauxCompletionDocumentsHuissier", tauxCompletionDocuments);
+            
+        } else {
+            // Valeurs par défaut si pas de documents huissier
+            features.put("nbDocumentsHuissierTotal", 0.0);
+            features.put("nbDocumentsHuissierPending", 0.0);
+            features.put("nbDocumentsHuissierExpired", 0.0);
+            features.put("nbDocumentsHuissierCompleted", 0.0);
+            features.put("joursDepuisPremierDocumentHuissier", 0.0);
+            features.put("nbDocumentsHuissier_PV_MISE_EN_DEMEURE", 0.0);
+            features.put("nbDocumentsHuissier_ORDONNANCE_PAIEMENT", 0.0);
+            features.put("nbDocumentsHuissier_PV_NOTIFICATION_ORDONNANCE", 0.0);
+            features.put("tauxCompletionDocumentsHuissier", 0.0);
         }
         
         // ========== Features de Finance ==========

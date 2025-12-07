@@ -11,6 +11,7 @@ import projet.carthagecreance_backend.Service.IaPredictionService;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -70,8 +71,14 @@ public class IaPredictionServiceImpl implements IaPredictionService {
             // 6. Parser la réponse JSON
             logger.debug("Réponse du script Python: {}", output);
             IaPredictionResult result = objectMapper.readValue(output.trim(), IaPredictionResult.class);
-            logger.info("Prédiction IA réussie: etatFinal={}, riskScore={}, riskLevel={}", 
-                result.getEtatFinal(), result.getRiskScore(), result.getRiskLevel());
+            
+            // Ajouter la date de prédiction si elle n'est pas déjà présente
+            if (result.getDatePrediction() == null) {
+                result.setDatePrediction(LocalDateTime.now());
+            }
+            
+            logger.info("Prédiction IA réussie: etatFinal={}, riskScore={}, riskLevel={}, datePrediction={}", 
+                result.getEtatFinal(), result.getRiskScore(), result.getRiskLevel(), result.getDatePrediction());
             
             return result;
             
@@ -124,6 +131,7 @@ public class IaPredictionServiceImpl implements IaPredictionService {
                 .etatFinal("NOT_RECOVERED")
                 .riskScore(100.0)
                 .riskLevel("Élevé")
+                .datePrediction(LocalDateTime.now())
                 .build();
     }
 }

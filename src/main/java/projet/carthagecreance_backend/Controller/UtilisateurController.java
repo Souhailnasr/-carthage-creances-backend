@@ -109,8 +109,10 @@ public class UtilisateurController {
      * }
      */
     @PostMapping
-    public ResponseEntity<AuthenticationResponse> createUtilisateur(@RequestBody Utilisateur utilisateur,
-                                                                    BindingResult result) {
+    public ResponseEntity<AuthenticationResponse> createUtilisateur(
+            @RequestBody Utilisateur utilisateur,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            BindingResult result) {
         try {
             System.out.println("===== DÉBUT CONTROLLER createUtilisateur =====");
             System.out.println("Utilisateur reçu: " + utilisateur.getEmail());
@@ -121,8 +123,23 @@ public class UtilisateurController {
                 return ResponseEntity.badRequest().body(AuthenticationResponse.builder().errors(errors).build());
             }
             
+            // ✅ Si un token JWT est fourni, extraire le créateur (pour création par chef/admin)
+            // Sinon, créer sans créateur (inscription publique)
+            Utilisateur createur = null;
+            if (authHeader != null && !authHeader.isBlank()) {
+                try {
+                    createur = userExtractionService.extractUserFromToken(authHeader);
+                    if (createur != null) {
+                        System.out.println("Créateur extrait du token: " + createur.getEmail() + " (ID: " + createur.getId() + ")");
+                    }
+                } catch (Exception e) {
+                    System.out.println("Impossible d'extraire le créateur du token (inscription publique): " + e.getMessage());
+                    // Continue avec createur = null pour inscription publique
+                }
+            }
+            
             System.out.println("Appel du service...");
-            AuthenticationResponse response = utilisateurService.createUtilisateur(utilisateur);
+            AuthenticationResponse response = utilisateurService.createUtilisateur(utilisateur, createur);
             System.out.println("Service appelé avec succès, token: " + (response.getToken() != null ? "PRÉSENT" : "ABSENT"));
             
             return ResponseEntity.ok(response);

@@ -3,6 +3,7 @@ package projet.carthagecreance_backend.Service.Impl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import projet.carthagecreance_backend.DTO.ActionRequestDTO;
@@ -16,6 +17,7 @@ import projet.carthagecreance_backend.Repository.ActionRepository;
 import projet.carthagecreance_backend.Repository.FinanceRepository;
 import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Service.ActionService;
+import projet.carthagecreance_backend.Event.DossierDataChangedEvent;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -38,6 +40,12 @@ public class ActionServiceImpl implements ActionService {
     
     @Autowired
     private projet.carthagecreance_backend.Service.AutomaticNotificationService automaticNotificationService;
+    
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
 
     /**
      * Crée une action à partir d'un DTO
@@ -210,7 +218,18 @@ public class ActionServiceImpl implements ActionService {
         }
         
         // Sauvegarder l'action mise à jour
-        return actionRepository.save(existingAction);
+        Action savedAction = actionRepository.save(existingAction);
+        
+        // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+        try {
+            if (dossier != null) {
+                eventPublisher.publishEvent(new DossierDataChangedEvent(this, dossier.getId(), "ACTION_AMIABLE"));
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la publication de l'événement de changement de données: {}", e.getMessage());
+        }
+        
+        return savedAction;
     }
 
     @Override
@@ -285,6 +304,20 @@ public class ActionServiceImpl implements ActionService {
             }
         } catch (Exception e) {
             logger.warn("Erreur lors de la notification automatique de création d'action: {}", e.getMessage());
+        }
+        
+        // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+        try {
+            eventPublisher.publishEvent(new DossierDataChangedEvent(this, dossier.getId(), "ACTION_AMIABLE"));
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la publication de l'événement de changement de données: {}", e.getMessage());
+        }
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après création d'action amiable: {}", e.getMessage());
         }
         
         return savedAction;
@@ -377,6 +410,15 @@ public class ActionServiceImpl implements ActionService {
         
         // Supprimer l'action
         actionRepository.deleteById(id);
+        
+        // Publier un événement pour déclencher le recalcul automatique de la prédiction IA
+        try {
+            if (dossier != null) {
+                eventPublisher.publishEvent(new DossierDataChangedEvent(this, dossier.getId(), "ACTION_AMIABLE"));
+            }
+        } catch (Exception e) {
+            logger.warn("Erreur lors de la publication de l'événement de changement de données: {}", e.getMessage());
+        }
     }
 
     @Override

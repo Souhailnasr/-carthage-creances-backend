@@ -12,6 +12,7 @@ import projet.carthagecreance_backend.Service.NotificationService;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -327,6 +328,386 @@ public class AutomaticNotificationServiceImpl implements AutomaticNotificationSe
                 null
             );
         }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierCreationUtilisateur(Utilisateur utilisateur, Utilisateur createur) {
+        if (utilisateur == null) {
+            return;
+        }
+        
+        try {
+            // Notifier l'utilisateur créé
+            String titre = "Compte créé";
+            String message = String.format("Votre compte a été créé avec le rôle: %s. Bienvenue !", 
+                    utilisateur.getRoleUtilisateur() != null ? utilisateur.getRoleUtilisateur().name() : "N/A");
+            
+            notificationService.creerNotificationAutomatique(
+                utilisateur.getId(),
+                TypeNotification.UTILISATEUR_CREE,
+                titre,
+                message,
+                utilisateur.getId(),
+                TypeEntite.UTILISATEUR,
+                "/profile"
+            );
+            
+            // Notifier le créateur (SuperAdmin ou Chef)
+            if (createur != null) {
+                String titreCreateur = "Utilisateur créé";
+                String messageCreateur = String.format("L'utilisateur %s %s (%s) a été créé avec succès.", 
+                        utilisateur.getNom(),
+                        utilisateur.getPrenom(),
+                        utilisateur.getEmail());
+                
+                notificationService.creerNotificationAutomatique(
+                    createur.getId(),
+                    TypeNotification.UTILISATEUR_CREE,
+                    titreCreateur,
+                    messageCreateur,
+                    utilisateur.getId(),
+                    TypeEntite.UTILISATEUR,
+                    "/users/" + utilisateur.getId()
+                );
+            }
+            
+            // Si c'est un agent, notifier son chef de département
+            if (utilisateur.getRoleUtilisateur() != null && 
+                utilisateur.getRoleUtilisateur().name().contains("AGENT")) {
+                RoleUtilisateur roleChef = getRoleChefPourAgent(utilisateur.getRoleUtilisateur());
+                if (roleChef != null) {
+                    notifierChefsDepartement(roleChef,
+                        TypeNotification.UTILISATEUR_AFFECTE,
+                        "Nouvel agent affecté",
+                        String.format("Un nouvel agent %s %s a été affecté à votre département.", 
+                                utilisateur.getNom(), utilisateur.getPrenom()),
+                        utilisateur.getId(),
+                        TypeEntite.UTILISATEUR
+                    );
+                }
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification de création d'utilisateur: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierAffectationUtilisateur(Utilisateur utilisateur, Utilisateur chef) {
+        if (utilisateur == null || chef == null) {
+            return;
+        }
+        
+        try {
+            String titre = "Affectation au département";
+            String message = String.format("Vous avez été affecté au département de %s %s.", 
+                    chef.getNom(), chef.getPrenom());
+            
+            notificationService.creerNotificationAutomatique(
+                utilisateur.getId(),
+                TypeNotification.UTILISATEUR_AFFECTE,
+                titre,
+                message,
+                utilisateur.getId(),
+                TypeEntite.UTILISATEUR,
+                "/profile"
+            );
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification d'affectation d'utilisateur: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierCreationDocumentHuissier(DocumentHuissier document, Dossier dossier) {
+        if (document == null || dossier == null) {
+            return;
+        }
+        
+        try {
+            String titre = "Document huissier créé";
+            String message = String.format("Un document huissier (%s) a été créé pour le dossier %s.", 
+                    document.getTypeDocument() != null ? document.getTypeDocument().name() : "Document",
+                    dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId());
+            
+            // Notifier l'agent responsable
+            if (dossier.getAgentResponsable() != null) {
+                notificationService.creerNotificationAutomatique(
+                    dossier.getAgentResponsable().getId(),
+                    TypeNotification.DOCUMENT_HUISSIER_CREE,
+                    titre,
+                    message,
+                    dossier.getId(),
+                    TypeEntite.DOSSIER,
+                    "/dossiers/" + dossier.getId() + "/documents-huissier"
+                );
+            }
+            
+            // Notifier les chefs du département juridique
+            notifierChefsDepartement(RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE,
+                TypeNotification.DOCUMENT_HUISSIER_CREE,
+                titre,
+                message,
+                dossier.getId(),
+                TypeEntite.DOSSIER
+            );
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification de création de document huissier: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierExpirationDocumentHuissier(DocumentHuissier document, Dossier dossier) {
+        if (document == null || dossier == null) {
+            return;
+        }
+        
+        try {
+            String titre = "Document huissier expiré";
+            String message = String.format("Le délai légal du document %s du dossier %s a expiré. Action requise.", 
+                    document.getTypeDocument() != null ? document.getTypeDocument().name() : "Document",
+                    dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId());
+            
+            // Notifier l'agent responsable
+            if (dossier.getAgentResponsable() != null) {
+                notificationService.creerNotificationAutomatique(
+                    dossier.getAgentResponsable().getId(),
+                    TypeNotification.DOCUMENT_HUISSIER_EXPIRE,
+                    titre,
+                    message,
+                    dossier.getId(),
+                    TypeEntite.DOSSIER,
+                    "/dossiers/" + dossier.getId() + "/documents-huissier"
+                );
+            }
+            
+            // Notifier les chefs du département juridique
+            notifierChefsDepartement(RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE,
+                TypeNotification.DOCUMENT_HUISSIER_EXPIRE,
+                titre,
+                message,
+                dossier.getId(),
+                TypeEntite.DOSSIER
+            );
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification d'expiration de document huissier: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierActionHuissierEffectuee(ActionHuissier action, Dossier dossier) {
+        if (action == null || dossier == null) {
+            return;
+        }
+        
+        try {
+            String titre = "Action huissier effectuée";
+            String message = String.format("Action %s réalisée par %s pour le dossier %s. Montant recouvré: %s TND.", 
+                    action.getTypeAction() != null ? action.getTypeAction().name() : "Action",
+                    action.getHuissierName() != null ? action.getHuissierName() : "Huissier",
+                    dossier.getNumeroDossier() != null ? dossier.getNumeroDossier() : "N°" + dossier.getId(),
+                    action.getMontantRecouvre() != null ? action.getMontantRecouvre().toString() : "0.00");
+            
+            // Notifier l'agent responsable
+            if (dossier.getAgentResponsable() != null) {
+                notificationService.creerNotificationAutomatique(
+                    dossier.getAgentResponsable().getId(),
+                    TypeNotification.ACTION_HUISSIER_PERFORMED,
+                    titre,
+                    message,
+                    dossier.getId(),
+                    TypeEntite.DOSSIER,
+                    "/dossiers/" + dossier.getId() + "/actions-huissier"
+                );
+            }
+            
+            // Notifier les chefs du département juridique
+            notifierChefsDepartement(RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE,
+                TypeNotification.ACTION_HUISSIER_PERFORMED,
+                titre,
+                message,
+                dossier.getId(),
+                TypeEntite.DOSSIER
+            );
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification d'action huissier: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void envoyerNotificationHierarchique(Utilisateur expediteur, List<Long> destinataires, 
+                                                TypeNotification type, String titre, String message,
+                                                Long entiteId, TypeEntite entiteType) {
+        if (expediteur == null || destinataires == null || destinataires.isEmpty()) {
+            return;
+        }
+        
+        try {
+            // Déterminer le type de notification hiérarchique selon le rôle de l'expéditeur
+            TypeNotification typeFinal = type;
+            if (expediteur.getRoleUtilisateur() == RoleUtilisateur.SUPER_ADMIN) {
+                // Vérifier si les destinataires sont des chefs ou des agents
+                for (Long destinataireId : destinataires) {
+                    Utilisateur destinataire = utilisateurRepository.findById(destinataireId).orElse(null);
+                    if (destinataire != null) {
+                        if (destinataire.getRoleUtilisateur().name().contains("CHEF")) {
+                            typeFinal = TypeNotification.NOTIFICATION_SUPERADMIN_VERS_CHEF;
+                        } else if (destinataire.getRoleUtilisateur().name().contains("AGENT")) {
+                            typeFinal = TypeNotification.NOTIFICATION_SUPERADMIN_VERS_AGENT;
+                        }
+                    }
+                }
+            } else if (expediteur.getRoleUtilisateur().name().contains("CHEF")) {
+                typeFinal = TypeNotification.NOTIFICATION_CHEF_VERS_AGENT;
+            }
+            
+            // Envoyer à tous les destinataires
+            for (Long destinataireId : destinataires) {
+                notificationService.creerNotificationAutomatique(
+                    destinataireId,
+                    typeFinal,
+                    titre,
+                    message,
+                    entiteId,
+                    entiteType,
+                    null
+                );
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de l'envoi de notification hiérarchique: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierSuperAdminVersChef(Utilisateur chef, TypeNotification type, String titre, 
+                                          String message, Long entiteId, TypeEntite entiteType) {
+        if (chef == null || !chef.getRoleUtilisateur().name().contains("CHEF")) {
+            return;
+        }
+        
+        try {
+            notificationService.creerNotificationAutomatique(
+                chef.getId(),
+                TypeNotification.NOTIFICATION_SUPERADMIN_VERS_CHEF,
+                titre,
+                message,
+                entiteId,
+                entiteType,
+                null
+            );
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification SuperAdmin vers Chef: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierSuperAdminVersAgent(Utilisateur agent, TypeNotification type, String titre, 
+                                           String message, Long entiteId, TypeEntite entiteType) {
+        if (agent == null || !agent.getRoleUtilisateur().name().contains("AGENT")) {
+            return;
+        }
+        
+        try {
+            notificationService.creerNotificationAutomatique(
+                agent.getId(),
+                TypeNotification.NOTIFICATION_SUPERADMIN_VERS_AGENT,
+                titre,
+                message,
+                entiteId,
+                entiteType,
+                null
+            );
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification SuperAdmin vers Agent: {}", e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifierChefVersAgents(Utilisateur chef, TypeNotification type, String titre, 
+                                      String message, Long entiteId, TypeEntite entiteType) {
+        if (chef == null || !chef.getRoleUtilisateur().name().contains("CHEF")) {
+            return;
+        }
+        
+        try {
+            // Récupérer les agents du département du chef
+            RoleUtilisateur roleChef = chef.getRoleUtilisateur();
+            List<RoleUtilisateur> rolesAgents = getRolesAgentsDuChef(roleChef);
+            List<Utilisateur> agents = utilisateurRepository.findByRoleUtilisateurIn(rolesAgents);
+            
+            // Envoyer la notification à tous les agents
+            for (Utilisateur agent : agents) {
+                notificationService.creerNotificationAutomatique(
+                    agent.getId(),
+                    TypeNotification.NOTIFICATION_CHEF_VERS_AGENT,
+                    titre,
+                    message,
+                    entiteId,
+                    entiteType,
+                    null
+                );
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AutomaticNotificationServiceImpl.class)
+                .error("Erreur lors de la notification Chef vers Agents: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Obtient le rôle du chef correspondant à un rôle d'agent
+     */
+    private RoleUtilisateur getRoleChefPourAgent(RoleUtilisateur roleAgent) {
+        switch (roleAgent) {
+            case AGENT_DOSSIER:
+                return RoleUtilisateur.CHEF_DEPARTEMENT_DOSSIER;
+            case AGENT_RECOUVREMENT_AMIABLE:
+                return RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE;
+            case AGENT_RECOUVREMENT_JURIDIQUE:
+                return RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE;
+            case AGENT_FINANCE:
+                return RoleUtilisateur.CHEF_DEPARTEMENT_FINANCE;
+            default:
+                return null;
+        }
+    }
+    
+    /**
+     * Obtient les rôles des agents d'un chef
+     */
+    private List<RoleUtilisateur> getRolesAgentsDuChef(RoleUtilisateur roleChef) {
+        List<RoleUtilisateur> roles = new java.util.ArrayList<>();
+        switch (roleChef) {
+            case CHEF_DEPARTEMENT_DOSSIER:
+                roles.add(RoleUtilisateur.AGENT_DOSSIER);
+                break;
+            case CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE:
+                roles.add(RoleUtilisateur.AGENT_RECOUVREMENT_AMIABLE);
+                break;
+            case CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE:
+                roles.add(RoleUtilisateur.AGENT_RECOUVREMENT_JURIDIQUE);
+                break;
+            case CHEF_DEPARTEMENT_FINANCE:
+                roles.add(RoleUtilisateur.AGENT_FINANCE);
+                break;
+            default:
+                break;
+        }
+        return roles;
     }
 }
 

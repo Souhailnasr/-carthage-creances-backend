@@ -11,6 +11,7 @@ import projet.carthagecreance_backend.Repository.DossierRepository;
 import projet.carthagecreance_backend.Repository.ActionRepository;
 import projet.carthagecreance_backend.Repository.AudienceRepository;
 import projet.carthagecreance_backend.Repository.ActionHuissierRepository;
+import projet.carthagecreance_backend.Repository.DocumentHuissierRepository;
 import projet.carthagecreance_backend.Service.EnquetteService;
 import projet.carthagecreance_backend.Service.NotificationService;
 import projet.carthagecreance_backend.Service.IaPredictionService;
@@ -61,6 +62,15 @@ public class EnquetteServiceImpl implements EnquetteService {
 
     @Autowired
     private ActionHuissierRepository actionHuissierRepository;
+    
+    @Autowired
+    private DocumentHuissierRepository documentHuissierRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.TarifDossierService tarifDossierService;
 
     private static final Logger logger = LoggerFactory.getLogger(EnquetteServiceImpl.class);
 
@@ -131,6 +141,13 @@ public class EnquetteServiceImpl implements EnquetteService {
                 // ✅ NOUVEAU : Déclencher la prédiction IA après validation automatique
                 triggerIaPrediction(savedEnquette.getDossier().getId(), savedEnquette);
                 
+                // Recalcul automatique des statistiques (asynchrone)
+                try {
+                    statistiqueService.recalculerStatistiquesAsync();
+                } catch (Exception e) {
+                    logger.warn("Erreur lors du recalcul automatique des statistiques après création d'enquête: {}", e.getMessage());
+                }
+                
                 return savedEnquette;
             } else {
                 // Enquête en attente si créée par un agent
@@ -156,6 +173,13 @@ public class EnquetteServiceImpl implements EnquetteService {
                     .dateCreation(LocalDateTime.now())
                     .build();
             validationEnqueteRepository.save(validation);
+        }
+
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après création d'enquête: {}", e.getMessage());
         }
 
         return savedEnquette;
@@ -461,9 +485,27 @@ public class EnquetteServiceImpl implements EnquetteService {
             }
         }
         
+        // ✅ NOUVEAU : Créer automatiquement le tarif d'enquête (300 TND)
+        try {
+            if (enquetteValidated != null && enquetteValidated.getDossier() != null) {
+                tarifDossierService.createTarifEnqueteAutomatique(enquetteValidated.getDossier(), enquetteValidated);
+                logger.info("Tarif d'enquête créé automatiquement pour l'enquête {}", enquetteId);
+            }
+        } catch (Exception e) {
+            logger.error("Erreur lors de la création automatique du tarif d'enquête: {}", e.getMessage());
+            // Ne pas bloquer la validation si la création du tarif échoue
+        }
+        
         // ✅ NOUVEAU : Déclencher la prédiction IA après validation
         if (enquetteValidated != null && enquetteValidated.getDossier() != null) {
             triggerIaPrediction(enquetteValidated.getDossier().getId(), enquetteValidated);
+        }
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après validation d'enquête: {}", e.getMessage());
         }
     }
 
@@ -551,6 +593,7 @@ public class EnquetteServiceImpl implements EnquetteService {
             List<Action> actions = actionRepository.findByDossierId(dossierId);
             List<Audience> audiences = audienceRepository.findByDossierId(dossierId);
             List<ActionHuissier> actionsHuissier = actionHuissierRepository.findByDossierId(dossierId);
+            List<DocumentHuissier> documentsHuissier = documentHuissierRepository.findByDossierId(dossierId);
             
             // Construire les features à partir des données réelles
             Map<String, Object> features = iaFeatureBuilderService.buildFeaturesFromRealData(
@@ -558,7 +601,8 @@ public class EnquetteServiceImpl implements EnquetteService {
                 enquette,  // Utiliser l'enquête validée
                 actions,
                 audiences,
-                actionsHuissier
+                actionsHuissier,
+                documentsHuissier
             );
             
             // Prédire avec l'IA
@@ -568,6 +612,7 @@ public class EnquetteServiceImpl implements EnquetteService {
             dossier.setEtatPrediction(EtatDossier.valueOf(prediction.getEtatFinal()));
             dossier.setRiskScore(prediction.getRiskScore());
             dossier.setRiskLevel(prediction.getRiskLevel());
+            dossier.setDatePrediction(LocalDateTime.now());
             
             // Sauvegarder le dossier mis à jour
             dossierRepository.save(dossier);

@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 /**
@@ -60,6 +61,14 @@ public class TarifDossierServiceImpl implements TarifDossierService {
     // Constantes pour les frais fixes selon l'annexe
     private static final BigDecimal FRAIS_CREATION_DOSSIER = new BigDecimal("250.00");
     private static final BigDecimal FRAIS_ENQUETE_PRECONTENTIEUSE = new BigDecimal("300.00");
+    private static final BigDecimal AVANCE_RECOUVREMENT_JURIDIQUE = new BigDecimal("1000.00");
+    private static final BigDecimal ATTESTATION_CARENCE = new BigDecimal("500.00");
+    
+    // Taux de commission selon annexe
+    private static final BigDecimal TAUX_COMMISSION_RELANCE = new BigDecimal("0.05");  // 5%
+    private static final BigDecimal TAUX_COMMISSION_AMIABLE = new BigDecimal("0.12");  // 12%
+    private static final BigDecimal TAUX_COMMISSION_JURIDIQUE = new BigDecimal("0.15");  // 15%
+    private static final BigDecimal TAUX_COMMISSION_INTERETS = new BigDecimal("0.50");  // 50%
     
     @Override
     public TraitementsDossierDTO getTraitementsDossier(Long dossierId) {
@@ -116,7 +125,8 @@ public class TarifDossierServiceImpl implements TarifDossierService {
         return phaseCreation;
     }
     
-    private TarifDossier createTarifCreationAutomatique(Dossier dossier) {
+    @Override
+    public TarifDossier createTarifCreationAutomatique(Dossier dossier) {
         TarifDossier tarif = TarifDossier.builder()
             .dossier(dossier)
             .phase(PhaseFrais.CREATION)
@@ -169,9 +179,21 @@ public class TarifDossierServiceImpl implements TarifDossierService {
         return phaseEnquete;
     }
     
-    private TarifDossier createTarifEnqueteAutomatique(Dossier dossier, Enquette enquete) {
+    /**
+     * Crée automatiquement le tarif d'enquête lors de la validation
+     */
+    @Override
+    public TarifDossier createTarifEnqueteAutomatique(Dossier dossier, Enquette enquete) {
+        // Vérifier si un tarif existe déjà
+        Optional<TarifDossier> existing = tarifDossierRepository
+            .findByDossierIdAndPhaseAndCategorie(dossier.getId(), PhaseFrais.ENQUETE, "ENQUETE_PRECONTENTIEUSE");
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        
         TarifDossier tarif = TarifDossier.builder()
             .dossier(dossier)
+            .enquete(enquete)
             .phase(PhaseFrais.ENQUETE)
             .categorie("ENQUETE_PRECONTENTIEUSE")
             .typeElement("Enquête Précontentieuse")
@@ -363,11 +385,99 @@ public class TarifDossierServiceImpl implements TarifDossierService {
             .commentaire(request.getCommentaire())
             .build();
         
+        // Gérer avocatId si fourni (pour honoraires d'avocat)
+        Long audienceIdFinal = request.getAudienceId();
+        if (request.getAvocatId() != null && request.getCategorie() != null && 
+            request.getCategorie().toUpperCase().contains("AVOCAT")) {
+            
+            // Si audienceId est aussi fourni, le prioriser (plus explicite)
+            if (request.getAudienceId() == null) {
+                // Trouver l'audience associée à cet avocat pour ce dossier
+                List<Audience> audiences = audienceRepository.findByDossierId(dossierId).stream()
+                    .filter(a -> a.getAvocat() != null && a.getAvocat().getId().equals(request.getAvocatId()))
+                    .sorted(Comparator.comparing(Audience::getDateAudience, Comparator.nullsLast(Comparator.reverseOrder())))
+                    .collect(Collectors.toList());
+                
+                if (audiences.isEmpty()) {
+                    throw new RuntimeException("Aucune audience trouvée pour l'avocat " + request.getAvocatId() + 
+                                            " dans le dossier " + dossierId);
+                }
+                
+                // Utiliser l'audience la plus récente
+                Audience audience = audiences.get(0);
+                audienceIdFinal = audience.getId();
+                logger.info("Mapping avocatId {} vers audienceId {} pour le dossier {}", 
+                    request.getAvocatId(), audienceIdFinal, dossierId);
+            }
+        }
+        
         // Lier aux traitements spécifiques si fournis
         if (request.getActionId() != null) {
             Action action = actionRepository.findById(request.getActionId())
                 .orElseThrow(() -> new RuntimeException("Action non trouvée"));
-            tarif.setAction(action);
+            
+            // ✅ VÉRIFIER SI UN TARIF EXISTE DÉJÀ POUR CETTE ACTION
+            Optional<TarifDossier> existingTarif = tarifDossierRepository
+                .findByDossierIdAndActionId(dossierId, request.getActionId());
+            
+            if (existingTarif.isPresent()) {
+                // ✅ TARIF EXISTE : Mettre à jour le coût si différent, puis valider
+                TarifDossier tarifExistant = existingTarif.get();
+                
+                logger.info("Tarif existant trouvé pour action {} dans dossier {}: ID={}, statut={}", 
+                    request.getActionId(), dossierId, tarifExistant.getId(), tarifExistant.getStatut());
+                
+                // Mettre à jour le coût unitaire si différent
+                boolean coutModifie = false;
+                if (request.getCoutUnitaire() != null && 
+                    !request.getCoutUnitaire().equals(tarifExistant.getCoutUnitaire())) {
+                    tarifExistant.setCoutUnitaire(request.getCoutUnitaire());
+                    coutModifie = true;
+                    logger.info("Mise à jour du coût unitaire: {} -> {}", 
+                        tarifExistant.getCoutUnitaire(), request.getCoutUnitaire());
+                }
+                
+                // Mettre à jour la quantité si fournie et différente
+                if (request.getQuantite() != null && 
+                    !request.getQuantite().equals(tarifExistant.getQuantite())) {
+                    tarifExistant.setQuantite(request.getQuantite());
+                    coutModifie = true;
+                }
+                
+                // Recalculer le montant total si le coût ou la quantité a changé
+                if (coutModifie) {
+                    BigDecimal nouveauMontant = tarifExistant.getCoutUnitaire()
+                        .multiply(BigDecimal.valueOf(tarifExistant.getQuantite()));
+                    tarifExistant.setMontantTotal(nouveauMontant);
+                }
+                
+                // Mettre à jour le commentaire si fourni
+                if (request.getCommentaire() != null && !request.getCommentaire().trim().isEmpty()) {
+                    tarifExistant.setCommentaire(request.getCommentaire());
+                }
+                
+                // ✅ NE PAS VALIDER AUTOMATIQUEMENT : Garder le statut actuel ou EN_ATTENTE_VALIDATION
+                // Si le tarif était déjà validé, on le garde validé
+                // Si le tarif était en attente, on le garde en attente (validation manuelle requise)
+                if (tarifExistant.getStatut() == null || tarifExistant.getStatut() == StatutTarif.EN_ATTENTE_VALIDATION) {
+                    tarifExistant.setStatut(StatutTarif.EN_ATTENTE_VALIDATION);
+                    tarifExistant.setDateValidation(null); // Pas de date de validation si pas encore validé
+                }
+                // Si déjà VALIDE, on garde VALIDE (pas de changement)
+                
+                TarifDossier saved = tarifDossierRepository.save(tarifExistant);
+                logger.info("Tarif existant mis à jour (validation manuelle requise): ID={}, Dossier={}, Action={}, Statut={}, Montant={}", 
+                    saved.getId(), dossierId, request.getActionId(), saved.getStatut(), saved.getMontantTotal());
+                
+                return mapToTarifDTO(saved);
+            } else {
+                // ✅ TARIF N'EXISTE PAS : Créer avec statut EN_ATTENTE_VALIDATION (validation manuelle requise)
+                tarif.setAction(action);
+                tarif.setStatut(StatutTarif.EN_ATTENTE_VALIDATION); // ✅ Validation manuelle requise
+                tarif.setDateValidation(null); // Pas de date de validation si pas encore validé
+                logger.info("Nouveau tarif créé (validation manuelle requise) pour action {} dans dossier {}", 
+                    request.getActionId(), dossierId);
+            }
         }
         
         if (request.getDocumentHuissierId() != null) {
@@ -382,10 +492,21 @@ public class TarifDossierServiceImpl implements TarifDossierService {
             tarif.setActionHuissier(actionHuissier);
         }
         
-        if (request.getAudienceId() != null) {
-            Audience audience = audienceRepository.findById(request.getAudienceId())
+        if (audienceIdFinal != null) {
+            Audience audience = audienceRepository.findById(audienceIdFinal)
                 .orElseThrow(() -> new RuntimeException("Audience non trouvée"));
             tarif.setAudience(audience);
+            
+            // Vérifier l'unicité (audienceId + categorie)
+            if (request.getCategorie() != null) {
+                Optional<TarifDossier> existing = tarifDossierRepository
+                    .findByDossierIdAndAudienceIdAndCategorie(dossierId, audienceIdFinal, request.getCategorie());
+                
+                if (existing.isPresent()) {
+                    throw new RuntimeException("Un tarif existe déjà pour cette audience (" + audienceIdFinal + 
+                                            ") avec la catégorie (" + request.getCategorie() + ")");
+                }
+            }
         }
         
         if (request.getEnqueteId() != null) {
@@ -397,9 +518,16 @@ public class TarifDossierServiceImpl implements TarifDossierService {
         // Calculer montantTotal
         tarif.setMontantTotal(tarif.getCoutUnitaire().multiply(BigDecimal.valueOf(tarif.getQuantite())));
         
+        // ✅ Si c'est un tarif d'action amiable et qu'il n'existait pas, il a déjà été validé automatiquement
+        // Sinon, pour les autres types (audience, document, etc.), garder EN_ATTENTE_VALIDATION
+        
         TarifDossier saved = tarifDossierRepository.save(tarif);
-        logger.info("Tarif créé avec succès: ID={}, Dossier={}, Phase={}, Catégorie={}", 
-            saved.getId(), dossierId, request.getPhase(), request.getCategorie());
+        
+        // Note: updateStatutValidationTarifs() sera appelé lors de la validation manuelle
+        // Pas besoin de l'appeler ici car le tarif est en EN_ATTENTE_VALIDATION
+        
+        logger.info("Tarif créé avec succès: ID={}, Dossier={}, Phase={}, Catégorie={}, Statut={}", 
+            saved.getId(), dossierId, request.getPhase(), request.getCategorie(), saved.getStatut());
         
         return mapToTarifDTO(saved);
     }
@@ -632,10 +760,14 @@ public class TarifDossierServiceImpl implements TarifDossierService {
         dto.setFraisHuissier(fraisHuissier);
         dto.setCoutGestionTotal(coutGestionTotal);
         
-        // Commissions (selon annexe - à calculer selon les règles métier)
-        // Pour l'instant, on met 0, à implémenter selon les règles de l'annexe
-        dto.setCommissionAmiable(BigDecimal.ZERO);
-        dto.setCommissionJuridique(BigDecimal.ZERO);
+        // ✅ Calcul des commissions selon l'annexe
+        BigDecimal commissionAmiable = calculerCommissionAmiable(dossier);
+        BigDecimal commissionJuridique = calculerCommissionJuridique(dossier);
+        BigDecimal commissionInterets = calculerCommissionInterets(dossier);
+        
+        dto.setCommissionAmiable(commissionAmiable);
+        dto.setCommissionJuridique(commissionJuridique);
+        dto.setCommissionInterets(commissionInterets);
         
         // Calcul du total HT
         BigDecimal totalHT = fraisCreation
@@ -645,8 +777,9 @@ public class TarifDossierServiceImpl implements TarifDossierService {
             .add(fraisJuridique)
             .add(fraisAvocat)
             .add(fraisHuissier)
-            .add(dto.getCommissionAmiable())
-            .add(dto.getCommissionJuridique());
+            .add(commissionAmiable)
+            .add(commissionJuridique)
+            .add(commissionInterets);
         
         dto.setTotalHT(totalHT);
         
@@ -660,6 +793,112 @@ public class TarifDossierServiceImpl implements TarifDossierService {
         dto.setTotalFacture(totalTTC);  // Alias
         
         return dto;
+    }
+    
+    /**
+     * Calcule la commission amiable (12% du montant recouvré en phase amiable)
+     */
+    private BigDecimal calculerCommissionAmiable(Dossier dossier) {
+        if (dossier.getMontantRecouvrePhaseAmiable() != null && 
+            dossier.getMontantRecouvrePhaseAmiable() > 0) {
+            return BigDecimal.valueOf(dossier.getMontantRecouvrePhaseAmiable())
+                .multiply(TAUX_COMMISSION_AMIABLE);
+        }
+        return BigDecimal.ZERO;
+    }
+    
+    /**
+     * Calcule la commission juridique (15% du montant recouvré en phase juridique)
+     */
+    private BigDecimal calculerCommissionJuridique(Dossier dossier) {
+        if (dossier.getMontantRecouvrePhaseJuridique() != null && 
+            dossier.getMontantRecouvrePhaseJuridique() > 0) {
+            return BigDecimal.valueOf(dossier.getMontantRecouvrePhaseJuridique())
+                .multiply(TAUX_COMMISSION_JURIDIQUE);
+        }
+        return BigDecimal.ZERO;
+    }
+    
+    /**
+     * Calcule la commission sur intérêts (50% du montant des intérêts recouvrés)
+     */
+    private BigDecimal calculerCommissionInterets(Dossier dossier) {
+        // Vérifier si le champ montantInteretsRecouvres existe
+        // Pour l'instant, on retourne 0 si le champ n'existe pas
+        try {
+            // Utiliser la réflexion pour vérifier si le champ existe
+            java.lang.reflect.Field field = dossier.getClass().getDeclaredField("montantInteretsRecouvres");
+            field.setAccessible(true);
+            Double montantInterets = (Double) field.get(dossier);
+            if (montantInterets != null && montantInterets > 0) {
+                return BigDecimal.valueOf(montantInterets)
+                    .multiply(TAUX_COMMISSION_INTERETS);
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Le champ n'existe pas encore, on retourne 0
+            logger.debug("Champ montantInteretsRecouvres non trouvé dans Dossier, commission intérêts = 0");
+        }
+        return BigDecimal.ZERO;
+    }
+    
+    /**
+     * Crée automatiquement l'avance sur frais de recouvrement judiciaire (1000 TND)
+     */
+    @Override
+    public TarifDossier createAvanceRecouvrementJuridique(Dossier dossier) {
+        // Vérifier si un tarif existe déjà
+        Optional<TarifDossier> existing = tarifDossierRepository
+            .findByDossierIdAndPhaseAndCategorie(dossier.getId(), PhaseFrais.JURIDIQUE, "AVANCE_RECOUVREMENT_JURIDIQUE");
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        
+        TarifDossier tarif = TarifDossier.builder()
+            .dossier(dossier)
+            .phase(PhaseFrais.JURIDIQUE)
+            .categorie("AVANCE_RECOUVREMENT_JURIDIQUE")
+            .typeElement("Avance sur frais de recouvrement judiciaire")
+            .coutUnitaire(AVANCE_RECOUVREMENT_JURIDIQUE)
+            .quantite(1)
+            .montantTotal(AVANCE_RECOUVREMENT_JURIDIQUE)
+            .statut(StatutTarif.VALIDE)
+            .dateCreation(LocalDateTime.now())
+            .dateValidation(LocalDateTime.now())
+            .commentaire("Avance fixe selon annexe - Création automatique lors du passage en phase juridique")
+            .build();
+        
+        return tarifDossierRepository.save(tarif);
+    }
+    
+    /**
+     * Crée un tarif pour l'attestation de carence (500 TND) - Manuel
+     */
+    @Override
+    public TarifDossier createTarifAttestationCarence(Long dossierId, String commentaire) {
+        Dossier dossier = dossierRepository.findById(dossierId)
+            .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + dossierId));
+        
+        // Vérifier si un tarif existe déjà
+        Optional<TarifDossier> existing = tarifDossierRepository
+            .findByDossierIdAndPhaseAndCategorie(dossierId, PhaseFrais.JURIDIQUE, "ATTESTATION_CARENCE");
+        if (existing.isPresent()) {
+            throw new RuntimeException("Un tarif d'attestation de carence existe déjà pour ce dossier");
+        }
+        
+        TarifDossier tarif = TarifDossier.builder()
+            .dossier(dossier)
+            .phase(PhaseFrais.JURIDIQUE)
+            .categorie("ATTESTATION_CARENCE")
+            .typeElement("Attestation de carence à la demande du mandant")
+            .coutUnitaire(ATTESTATION_CARENCE)
+            .quantite(1)
+            .montantTotal(ATTESTATION_CARENCE)
+            .statut(StatutTarif.EN_ATTENTE_VALIDATION)
+            .dateCreation(LocalDateTime.now())
+            .commentaire(commentaire != null ? commentaire : "Attestation de carence - À la demande du mandant")
+            .build();
+        
+        return tarifDossierRepository.save(tarif);
     }
     
     @Override

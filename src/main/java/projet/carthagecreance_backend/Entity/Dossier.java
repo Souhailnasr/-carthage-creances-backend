@@ -41,6 +41,15 @@ public class Dossier implements Serializable {
     @Builder.Default
     private Double montantRecouvre = 0.0;
     
+    // ✅ NOUVEAU : Montants recouvrés par phase (pour traçabilité)
+    @Column(name = "montant_recouvre_phase_amiable")
+    @Builder.Default
+    private Double montantRecouvrePhaseAmiable = 0.0;
+    
+    @Column(name = "montant_recouvre_phase_juridique")
+    @Builder.Default
+    private Double montantRecouvrePhaseJuridique = 0.0;
+    
     @Column(name = "montant_restant")
     private Double montantRestant;
     
@@ -58,6 +67,10 @@ public class Dossier implements Serializable {
     
     @Column(name = "risk_level", length = 20)
     private String riskLevel; // Niveau de risque: "Faible", "Moyen", "Élevé"
+    
+    @Column(name = "date_prediction")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime datePrediction; // Date de la dernière prédiction IA
 
     // Dates
     @Column(nullable = false, updatable = false)

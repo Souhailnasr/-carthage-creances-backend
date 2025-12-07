@@ -1,9 +1,12 @@
 package projet.carthagecreance_backend.DTO;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
 
 /**
  * DTO pour le résultat de la prédiction IA
@@ -27,5 +30,11 @@ public class IaPredictionResult {
      * Niveau de risque : "Faible", "Moyen", "Élevé"
      */
     private String riskLevel;
+    
+    /**
+     * Date de la prédiction
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime datePrediction;
 }
 

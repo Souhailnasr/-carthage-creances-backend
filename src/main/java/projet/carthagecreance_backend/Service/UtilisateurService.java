@@ -19,9 +19,10 @@ public interface UtilisateurService {
     /**
      * Crée un nouvel utilisateur avec validation des rôles
      * @param utilisateur L'utilisateur à créer
+     * @param createur L'utilisateur créateur (peut être null pour SUPER_ADMIN)
      * @return L'utilisateur créé
      */
-    AuthenticationResponse createUtilisateur(Utilisateur utilisateur);
+    AuthenticationResponse createUtilisateur(Utilisateur utilisateur, Utilisateur createur);
     
     /**
      * Récupère un utilisateur par son ID

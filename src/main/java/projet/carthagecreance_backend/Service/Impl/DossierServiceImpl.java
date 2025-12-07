@@ -79,6 +79,12 @@ public class DossierServiceImpl implements DossierService {
 
     @Autowired
     private projet.carthagecreance_backend.Service.DossierMontantService dossierMontantService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.TarifDossierService tarifDossierService;
 
     /**
      * Crée un nouveau dossier avec workflow de validation
@@ -149,6 +155,13 @@ public class DossierServiceImpl implements DossierService {
             if (dossier.getMontantCreance() != null) {
                 dossier.setMontantTotal(dossier.getMontantCreance());
                 dossier.setMontantRecouvre(0.0);
+                // ✅ NOUVEAU : Initialiser les montants par phase
+                if (dossier.getMontantRecouvrePhaseAmiable() == null) {
+                    dossier.setMontantRecouvrePhaseAmiable(0.0);
+                }
+                if (dossier.getMontantRecouvrePhaseJuridique() == null) {
+                    dossier.setMontantRecouvrePhaseJuridique(0.0);
+                }
                 // Recalculer montantRestant et état
                 dossier = dossierMontantService.recalculerMontantRestantEtEtat(dossier);
             }
@@ -231,6 +244,13 @@ public class DossierServiceImpl implements DossierService {
                 automaticNotificationService.notifierCreationDossier(savedDossier);
             } catch (Exception e) {
                 logger.warn("Erreur lors de la notification automatique de création de dossier: {}", e.getMessage());
+            }
+
+            // Recalcul automatique des statistiques (asynchrone)
+            try {
+                statistiqueService.recalculerStatistiquesAsync();
+            } catch (Exception e) {
+                logger.warn("Erreur lors du recalcul automatique des statistiques après création de dossier: {}", e.getMessage());
             }
 
             return savedDossier;
@@ -360,6 +380,13 @@ public class DossierServiceImpl implements DossierService {
                 notificationService.createNotification(notification);
             }
 
+            // Recalcul automatique des statistiques (asynchrone)
+            try {
+                statistiqueService.recalculerStatistiquesAsync();
+            } catch (Exception e) {
+                logger.warn("Erreur lors du recalcul automatique des statistiques après modification de dossier: {}", e.getMessage());
+            }
+
             return updatedDossier;
         } else {
             logger.warn("updateDossier: dossier {} introuvable", id);
@@ -369,17 +396,36 @@ public class DossierServiceImpl implements DossierService {
 
     /**
      * Supprime un dossier avec vérifications
-     * Vérifie qu'il n'y a pas de validations en cours
+     * Vérifie qu'il n'y a pas de validations EN_ATTENTE
+     * Permet la suppression si toutes les validations sont VALIDE ou REJETE
      */
     @Override
     public void deleteDossier(Long id) {
         Optional<Dossier> dossier = dossierRepository.findById(id);
         if (dossier.isPresent()) {
-            // Vérifier s'il y a des validations en cours
+            // Récupérer toutes les validations du dossier
             List<ValidationDossier> validations = validationDossierRepository.findByDossierId(id);
-            if (!validations.isEmpty()) {
-                logger.warn("deleteDossier: validations en cours pour dossier {}", id);
-                throw new RuntimeException("Impossible de supprimer le dossier: des validations sont en cours");
+            
+            // Filtrer pour ne garder que celles avec statut EN_ATTENTE
+            List<ValidationDossier> validationsEnAttente = validations.stream()
+                    .filter(v -> v.getStatut() == StatutValidation.EN_ATTENTE)
+                    .toList();
+            
+            // Bloquer la suppression seulement s'il y a des validations EN_ATTENTE
+            if (!validationsEnAttente.isEmpty()) {
+                logger.warn("deleteDossier: validations EN_ATTENTE pour dossier {} ({} validation(s) en attente)", 
+                    id, validationsEnAttente.size());
+                throw new RuntimeException("Impossible de supprimer le dossier: des validations sont en cours (EN_ATTENTE)");
+            }
+            
+            // Si toutes les validations sont VALIDE ou REJETE, permettre la suppression
+            logger.info("deleteDossier: suppression autorisée pour dossier {} (toutes les validations sont VALIDE ou REJETE)", id);
+            
+            // Supprimer tous les tarifs associés au dossier avant de supprimer le dossier
+            List<TarifDossier> tarifs = tarifDossierRepository.findByDossierId(id);
+            if (!tarifs.isEmpty()) {
+                logger.info("deleteDossier: suppression de {} tarif(s) associé(s) au dossier {}", tarifs.size(), id);
+                tarifDossierRepository.deleteAll(tarifs);
             }
             
             // Supprimer le dossier
@@ -594,6 +640,15 @@ public class DossierServiceImpl implements DossierService {
             }
         }
 
+        // ✅ NOUVEAU : Créer automatiquement le tarif de création (250 TND)
+        try {
+            tarifDossierService.createTarifCreationAutomatique(dossier);
+            logger.info("Tarif de création créé automatiquement pour le dossier {}", dossierId);
+        } catch (Exception e) {
+            logger.error("Erreur lors de la création automatique du tarif de création: {}", e.getMessage());
+            // Ne pas bloquer la validation si la création du tarif échoue
+        }
+        
         // Envoyer une notification à l'agent créateur
         List<ValidationDossier> dossierValidations = validationDossierRepository.findByDossierId(dossierId);
         for (ValidationDossier validation : dossierValidations) {
@@ -609,6 +664,13 @@ public class DossierServiceImpl implements DossierService {
                         .build();
                 notificationService.createNotification(notification);
             }
+        }
+
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après validation de dossier: {}", e.getMessage());
         }
 
     }
@@ -737,7 +799,16 @@ public class DossierServiceImpl implements DossierService {
         // Assigner l'avocat
         dossier.setAvocat(avocat);
         
-        return dossierRepository.save(dossier);
+        Dossier savedDossier = dossierRepository.save(dossier);
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après affectation d'avocat: {}", e.getMessage());
+        }
+        
+        return savedDossier;
     }
 
     @Override
@@ -754,7 +825,16 @@ public class DossierServiceImpl implements DossierService {
         // Assigner l'huissier
         dossier.setHuissier(huissier);
         
-        return dossierRepository.save(dossier);
+        Dossier savedDossier = dossierRepository.save(dossier);
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après affectation d'huissier: {}", e.getMessage());
+        }
+        
+        return savedDossier;
     }
     
     @Override
@@ -797,7 +877,16 @@ public class DossierServiceImpl implements DossierService {
             logger.warn("Aucun avocat ni huissier n'a été affecté au dossier {}", dossierId);
         }
         
-        return dossierRepository.save(dossier);
+        Dossier savedDossier = dossierRepository.save(dossier);
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après affectation d'avocat/huissier: {}", e.getMessage());
+        }
+        
+        return savedDossier;
     }
     
     @Override

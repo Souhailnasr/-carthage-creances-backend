@@ -1,0 +1,461 @@
+{
+	"info": {
+		"_postman_id": "statistiques-collection-2025",
+		"name": "Statistiques - Carthage Créance",
+		"description": "Collection complète pour tester tous les endpoints de statistiques",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8089/carthage-creance/api",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "VOTRE_TOKEN_JWT_ICI",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. SuperAdmin - Statistiques Globales",
+			"item": [
+				{
+					"name": "GET Statistiques Globales",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/globales",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "globales"]
+						},
+						"description": "Récupère toutes les statistiques globales (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques par Période",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/periode?dateDebut=2025-01-01&dateFin=2025-12-31",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "periode"],
+							"query": [
+								{
+									"key": "dateDebut",
+									"value": "2025-01-01",
+									"description": "Date de début (format: YYYY-MM-DD)"
+								},
+								{
+									"key": "dateFin",
+									"value": "2025-12-31",
+									"description": "Date de fin (format: YYYY-MM-DD)"
+								}
+							]
+						},
+						"description": "Récupère les statistiques pour une période donnée (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Tous les Chefs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/chefs",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "chefs"]
+						},
+						"description": "Récupère les statistiques de tous les chefs (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Dossiers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/dossiers",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "dossiers"]
+						},
+						"description": "Récupère les statistiques des dossiers (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Actions Amiables",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/actions-amiables",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "actions-amiables"]
+						},
+						"description": "Récupère les statistiques des actions amiables (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Audiences",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/audiences",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "audiences"]
+						},
+						"description": "Récupère les statistiques des audiences (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Tâches",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/taches",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "taches"]
+						},
+						"description": "Récupère les statistiques des tâches (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Financières",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/financieres",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "financieres"]
+						},
+						"description": "Récupère les statistiques financières (SuperAdmin uniquement)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Recouvrement par Phase",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/recouvrement-par-phase",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "recouvrement-par-phase"]
+						},
+						"description": "✅ NOUVEAU : Récupère les statistiques de recouvrement par phase (amiable et juridique)"
+					},
+					"response": []
+				},
+				{
+					"name": "POST Recalculer Statistiques",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/recalculer",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "recalculer"]
+						},
+						"description": "Force le recalcul des statistiques (SuperAdmin uniquement)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Chefs - Statistiques Département",
+			"item": [
+				{
+					"name": "GET Statistiques Département",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/departement",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "departement"]
+						},
+						"description": "Récupère les statistiques du département du chef connecté"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Mes Agents",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/mes-agents",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "mes-agents"]
+						},
+						"description": "Récupère les statistiques des agents du chef connecté"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Agent Spécifique",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/agent/1",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "agent", "1"],
+							"variable": [
+								{
+									"key": "agentId",
+									"value": "1",
+									"description": "ID de l'agent"
+								}
+							]
+						},
+						"description": "Récupère les statistiques d'un agent spécifique (remplacer 1 par l'ID de l'agent)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Statistiques Recouvrement par Phase - Département",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/recouvrement-par-phase/departement",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "recouvrement-par-phase", "departement"]
+						},
+						"description": "✅ NOUVEAU : Récupère les statistiques de recouvrement par phase pour le département du chef"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Agents - Statistiques Personnelles",
+			"item": [
+				{
+					"name": "GET Statistiques Mes Dossiers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/statistiques/mes-dossiers",
+							"host": ["{{base_url}}"],
+							"path": ["statistiques", "mes-dossiers"]
+						},
+						"description": "Récupère les statistiques des dossiers de l'agent connecté"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "4. Historique Recouvrement",
+			"item": [
+				{
+					"name": "GET Historique Dossier",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/historique-recouvrement/dossier/1",
+							"host": ["{{base_url}}"],
+							"path": ["historique-recouvrement", "dossier", "1"],
+							"variable": [
+								{
+									"key": "dossierId",
+									"value": "1",
+									"description": "ID du dossier"
+								}
+							]
+						},
+						"description": "Récupère l'historique complet des recouvrements d'un dossier (remplacer 1 par l'ID du dossier)"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Historique Dossier par Phase",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/historique-recouvrement/dossier/1/phase/AMIABLE",
+							"host": ["{{base_url}}"],
+							"path": ["historique-recouvrement", "dossier", "1", "phase", "AMIABLE"],
+							"variable": [
+								{
+									"key": "dossierId",
+									"value": "1",
+									"description": "ID du dossier"
+								},
+								{
+									"key": "phase",
+									"value": "AMIABLE",
+									"description": "Phase: AMIABLE ou JURIDIQUE"
+								}
+							]
+						},
+						"description": "Récupère l'historique des recouvrements d'un dossier pour une phase spécifique"
+					},
+					"response": []
+				},
+				{
+					"name": "GET Résumé Recouvrement Dossier",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/historique-recouvrement/dossier/1/resume",
+							"host": ["{{base_url}}"],
+							"path": ["historique-recouvrement", "dossier", "1", "resume"],
+							"variable": [
+								{
+									"key": "dossierId",
+									"value": "1",
+									"description": "ID du dossier"
+								}
+							]
+						},
+						"description": "Récupère un résumé des montants recouvrés par phase pour un dossier"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
+
+
+
+

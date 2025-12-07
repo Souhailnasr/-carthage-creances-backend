@@ -71,5 +71,24 @@ public interface StatistiqueService {
      * @return Map contenant les statistiques financières
      */
     Map<String, Object> getStatistiquesFinancieres();
+    
+    /**
+     * Recalcule et stocke automatiquement les statistiques globales
+     * Méthode asynchrone appelée après chaque action importante (création/modification de dossier, enquête, action, etc.)
+     */
+    void recalculerStatistiquesAsync();
+    
+    /**
+     * ✅ NOUVEAU : Récupère les statistiques de recouvrement par phase
+     * @return Map contenant les statistiques de recouvrement par phase (amiable et juridique)
+     */
+    Map<String, Object> getStatistiquesRecouvrementParPhase();
+    
+    /**
+     * ✅ NOUVEAU : Récupère les statistiques de recouvrement par phase pour un département
+     * @param role Rôle du chef de département
+     * @return Map contenant les statistiques de recouvrement par phase pour le département
+     */
+    Map<String, Object> getStatistiquesRecouvrementParPhaseDepartement(projet.carthagecreance_backend.Entity.RoleUtilisateur role);
 }
 

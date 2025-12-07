@@ -7,15 +7,13 @@ import projet.carthagecreance_backend.DTO.DocumentHuissierDTO;
 import projet.carthagecreance_backend.Entity.*;
 import projet.carthagecreance_backend.Repository.DocumentHuissierRepository;
 import projet.carthagecreance_backend.Repository.DossierRepository;
-import projet.carthagecreance_backend.Service.AuditLogService;
 import projet.carthagecreance_backend.Service.DocumentHuissierService;
 import projet.carthagecreance_backend.Service.NotificationHuissierService;
+import projet.carthagecreance_backend.Service.AutomaticNotificationService;
 import projet.carthagecreance_backend.Service.RecommendationService;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @Transactional
@@ -28,13 +26,16 @@ public class DocumentHuissierServiceImpl implements DocumentHuissierService {
     private DossierRepository dossierRepository;
     
     @Autowired
-    private AuditLogService auditLogService;
+    private NotificationHuissierService notificationHuissierService; // Gardé pour compatibilité
     
     @Autowired
-    private NotificationHuissierService notificationHuissierService;
+    private AutomaticNotificationService automaticNotificationService; // Nouveau système unifié
     
     @Autowired
     private RecommendationService recommendationService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
     
     @Override
     public DocumentHuissier createDocument(DocumentHuissierDTO dto) {
@@ -66,30 +67,18 @@ public class DocumentHuissierServiceImpl implements DocumentHuissierService {
         
         DocumentHuissier saved = documentHuissierRepository.save(document);
         
-        // Créer un audit log
-        try {
-            Map<String, Object> after = new HashMap<>();
-            after.put("documentId", saved.getId());
-            after.put("typeDocument", saved.getTypeDocument());
-            after.put("delaiLegalDays", saved.getDelaiLegalDays());
-            
-            auditLogService.logChangement(
-                dto.getDossierId(),
-                null,
-                TypeChangementAudit.DOCUMENT_CREATE,
-                new HashMap<>(),
-                after,
-                "Création du document huissier: " + saved.getTypeDocument()
-            );
-        } catch (Exception e) {
-            System.err.println("Erreur lors de la création de l'audit log: " + e.getMessage());
-        }
-        
-        // Créer les notifications programmées (rappel et expiration)
+        // Créer les notifications programmées (rappel et expiration) - Ancien système
         try {
             notificationHuissierService.scheduleDocumentNotifications(saved);
         } catch (Exception e) {
-            System.err.println("Erreur lors de la programmation des notifications: " + e.getMessage());
+            System.err.println("Erreur lors de la programmation des notifications (ancien système): " + e.getMessage());
+        }
+        
+        // Créer une notification via le système unifié
+        try {
+            automaticNotificationService.notifierCreationDocumentHuissier(saved, dossier);
+        } catch (Exception e) {
+            System.err.println("Erreur lors de la notification unifiée: " + e.getMessage());
         }
         
         // Créer une recommandation initiale
@@ -97,6 +86,13 @@ public class DocumentHuissierServiceImpl implements DocumentHuissierService {
             recommendationService.createRecommendationForDocument(saved);
         } catch (Exception e) {
             System.err.println("Erreur lors de la création de la recommandation: " + e.getMessage());
+        }
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            System.err.println("Erreur lors du recalcul automatique des statistiques après création de document huissier: " + e.getMessage());
         }
         
         return saved;
@@ -170,29 +166,6 @@ public class DocumentHuissierServiceImpl implements DocumentHuissierService {
         try {
             DocumentHuissier saved = documentHuissierRepository.save(document);
             System.out.println("✅ Document sauvegardé avec succès - Nouveau statut: " + saved.getStatus());
-
-            // Créer un audit log (non bloquant)
-            try {
-                Map<String, Object> before = new HashMap<>();
-                before.put("status", StatutDocumentHuissier.PENDING);
-
-                Map<String, Object> after = new HashMap<>();
-                after.put("status", StatutDocumentHuissier.COMPLETED);
-
-                auditLogService.logChangement(
-                        saved.getDossierId(),
-                        null,
-                        TypeChangementAudit.DOCUMENT_UPDATE,
-                        before,
-                        after,
-                        "Document huissier marqué comme complété: " + saved.getTypeDocument()
-                );
-                System.out.println("✅ Audit log créé avec succès");
-            } catch (Exception e) {
-                System.err.println("⚠️ Erreur lors de la création de l'audit log (non bloquant): " + e.getMessage());
-                e.printStackTrace();
-                // Ne pas propager l'exception - l'audit log est optionnel
-            }
 
             return saved;
         } catch (Exception e) {

@@ -365,6 +365,40 @@ public class TacheUrgenteServiceImpl implements TacheUrgenteService {
     }
 
     /**
+     * Récupère les tâches créées par un chef
+     * @param chefId L'ID du chef
+     * @return Liste des tâches créées par le chef
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<TacheUrgente> getTachesByChef(Long chefId) {
+        return tacheUrgenteRepository.findByChefCreateurId(chefId);
+    }
+    
+    /**
+     * Récupère les tâches par agent et statut
+     * @param agentId L'ID de l'agent
+     * @param statut Le statut des tâches
+     * @return Liste des tâches correspondantes
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<TacheUrgente> getTachesByAgentAndStatut(Long agentId, StatutTache statut) {
+        return tacheUrgenteRepository.findByAgentAssignéIdAndStatut(agentId, statut);
+    }
+    
+    /**
+     * Récupère les tâches par type
+     * @param type Le type de tâche
+     * @return Liste des tâches avec ce type
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<TacheUrgente> getTachesByType(projet.carthagecreance_backend.Entity.TypeTache type) {
+        return tacheUrgenteRepository.findByType(type);
+    }
+    
+    /**
      * Valide les données d'une tâche
      * @param tache La tâche à valider
      * @throws RuntimeException si les données sont invalides

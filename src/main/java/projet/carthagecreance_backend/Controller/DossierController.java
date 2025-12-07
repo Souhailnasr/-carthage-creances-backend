@@ -11,9 +11,14 @@ import projet.carthagecreance_backend.Entity.Dossier;
 import projet.carthagecreance_backend.Entity.Urgence;
 import projet.carthagecreance_backend.Entity.StatutValidation;
 import projet.carthagecreance_backend.Entity.Statut;
+import projet.carthagecreance_backend.Entity.EtatDossier;
+import projet.carthagecreance_backend.Entity.Audience;
+import projet.carthagecreance_backend.Entity.Action;
+import projet.carthagecreance_backend.Entity.HistoriqueRecouvrement;
 import io.jsonwebtoken.ExpiredJwtException;
 import projet.carthagecreance_backend.Service.DossierService;
 import projet.carthagecreance_backend.Service.DossierMontantService;
+import projet.carthagecreance_backend.Service.StatistiqueService;
 import projet.carthagecreance_backend.DTO.DossierRequest; // Ajout de l'import DTO
 import projet.carthagecreance_backend.DTO.AffectationDossierDTO;
 import projet.carthagecreance_backend.DTO.MontantDossierDTO;
@@ -30,12 +35,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import projet.carthagecreance_backend.Repository.DossierRepository;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Contrôleur REST complet pour la gestion des dossiers avec workflow
@@ -87,6 +95,12 @@ public class DossierController {
     
     @Autowired
     private projet.carthagecreance_backend.Repository.AudienceRepository audienceRepository;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Repository.DocumentHuissierRepository documentHuissierRepository;
+    
+    @Autowired
+    private StatistiqueService statistiqueService;
 
     // Méthode utilitaire pour déterminer si un rôle est chef
     private boolean isChef(RoleUtilisateur role) {
@@ -238,7 +252,7 @@ public class DossierController {
      */
     @PostMapping(path = "/create", consumes = {"multipart/form-data"})
     public ResponseEntity<?> createDossierWithFiles(
-            @RequestPart("dossier") DossierRequest request,
+            @RequestPart(value = "dossier", required = true) String dossierJson,
             @RequestPart(value = "contratSigne", required = false) MultipartFile contratSigne,
             @RequestPart(value = "pouvoir", required = false) MultipartFile pouvoir,
             @RequestParam(value = "isChef", required = false, defaultValue = "false") boolean isChef,
@@ -276,6 +290,22 @@ public class DossierController {
                     "code", "TOKEN_EXPIRED",
                     "expiredAt", e.getClaims().getExpiration().toString(),
                     "currentTime", new Date().toString(),
+                    "timestamp", new Date().toString()
+                ));
+            }
+
+            // Désérialiser le JSON du dossier
+            DossierRequest request;
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                request = objectMapper.readValue(dossierJson, DossierRequest.class);
+                logger.info("/api/dossiers/create (multipart) - Dossier JSON désérialisé avec succès");
+            } catch (Exception e) {
+                logger.error("/api/dossiers/create (multipart) - Erreur de désérialisation JSON: {}", e.getMessage(), e);
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Format de données invalide",
+                    "message", "Le champ 'dossier' doit être un JSON valide. Erreur: " + e.getMessage(),
+                    "code", "INVALID_JSON",
                     "timestamp", new Date().toString()
                 ));
             }
@@ -674,18 +704,39 @@ public class DossierController {
      * Supprime un dossier avec vérifications
      * 
      * @param id L'ID du dossier à supprimer
-     * @return ResponseEntity vide (204 NO_CONTENT) ou erreur (404 NOT_FOUND)
+     * @return ResponseEntity vide (204 NO_CONTENT) ou erreur avec message explicite
      * 
      * @example
      * DELETE /api/dossiers/1
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteDossier(@PathVariable Long id) {
+    public ResponseEntity<?> deleteDossier(@PathVariable Long id) {
         try {
             dossierService.deleteDossier(id);
+            logger.info("Dossier {} supprimé avec succès", id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            String errorMessage = e.getMessage();
+            logger.error("Erreur lors de la suppression du dossier {}: {}", id, errorMessage);
+            
+            // Distinguer les différents types d'erreurs
+            if (errorMessage != null && errorMessage.contains("not found")) {
+                // Dossier non trouvé
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Dossier introuvable", "message", errorMessage));
+            } else if (errorMessage != null && errorMessage.contains("validations sont en cours")) {
+                // Validations EN_ATTENTE
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Suppression impossible", "message", errorMessage));
+            } else {
+                // Autre erreur
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur lors de la suppression", "message", errorMessage != null ? errorMessage : "Erreur inconnue"));
+            }
+        } catch (Exception e) {
+            logger.error("Erreur inattendue lors de la suppression du dossier {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Erreur interne du serveur", "message", e.getMessage()));
         }
     }
 
@@ -1697,23 +1748,54 @@ public class DossierController {
     @PostMapping("/{id}/amiable")
     public ResponseEntity<?> enregistrerActionAmiable(
             @PathVariable Long id,
-            @RequestBody ActionAmiableDTO dto) {
+            @RequestBody ActionAmiableDTO dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
         try {
             // Validation
             if (dto.getMontantRecouvre() == null) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "montantRecouvre est requis"));
             }
-            if (dto.getMontantRecouvre().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            if (dto.getMontantRecouvre().compareTo(BigDecimal.ZERO) < 0) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "montantRecouvre ne peut pas être négatif"));
             }
             
-            // Mettre à jour le montant recouvré (mode ADD par défaut)
-            Dossier dossier = dossierMontantService.updateMontantRecouvreAmiable(
+            // Extraire l'utilisateur pour la traçabilité
+            Utilisateur utilisateur = userExtractionService.extractUserFromToken(authHeader);
+            Long utilisateurId = utilisateur != null ? utilisateur.getId() : null;
+            
+            // ✅ Récupérer la dernière action amiable créée pour ce dossier
+            // (pour l'inclure dans l'historique de recouvrement)
+            Long actionId = null;
+            try {
+                List<Action> actions = actionRepository.findByDossierId(id);
+                Optional<Action> derniereActionAmiable = actions.stream()
+                    .filter(action -> action.getDossier() != null && 
+                            action.getDossier().getTypeRecouvrement() == TypeRecouvrement.AMIABLE)
+                    .filter(action -> action.getDateAction() != null)
+                    .sorted((a1, a2) -> a2.getDateAction().compareTo(a1.getDateAction())) // Plus récente en premier
+                    .findFirst();
+                
+                if (derniereActionAmiable.isPresent()) {
+                    actionId = derniereActionAmiable.get().getId();
+                    logger.debug("Action amiable trouvée pour l'historique: actionId={}, dossierId={}", actionId, id);
+                } else {
+                    logger.debug("Aucune action amiable trouvée pour le dossier {}, l'historique sera créé sans actionId", id);
+                }
+            } catch (Exception e) {
+                logger.warn("Erreur lors de la récupération de l'action amiable pour l'historique: {}", e.getMessage());
+                // On continue quand même, l'actionId sera null
+            }
+            
+            // ✅ NOUVEAU : Mettre à jour le montant recouvré avec traçabilité par phase
+            Dossier dossier = dossierMontantService.updateMontantRecouvrePhaseAmiable(
                 id, 
                 dto.getMontantRecouvre(), 
-                projet.carthagecreance_backend.Entity.ModeMiseAJour.ADD
+                projet.carthagecreance_backend.Entity.ModeMiseAJour.ADD,
+                actionId, // ✅ Utiliser l'ID de la dernière action amiable si disponible
+                utilisateurId,
+                "Recouvrement suite à action amiable"
             );
             
             // ✅ NOUVEAU : Prédiction IA
@@ -1727,6 +1809,8 @@ public class DossierController {
                     audienceRepository.findByDossierId(id);
                 List<projet.carthagecreance_backend.Entity.ActionHuissier> actionsHuissier = 
                     actionHuissierRepository.findByDossierId(id);
+                List<projet.carthagecreance_backend.Entity.DocumentHuissier> documentsHuissier = 
+                    documentHuissierRepository.findByDossierId(id);
                 
                 // Construire les features à partir des données réelles
                 Map<String, Object> features = iaFeatureBuilderService.buildFeaturesFromRealData(
@@ -1734,7 +1818,8 @@ public class DossierController {
                     enqueteOpt.orElse(null),
                     actions,
                     audiences,
-                    actionsHuissier
+                    actionsHuissier,
+                    documentsHuissier
                 );
                 
                 // Prédire avec l'IA
@@ -1747,6 +1832,7 @@ public class DossierController {
                 );
                 dossier.setRiskScore(prediction.getRiskScore());
                 dossier.setRiskLevel(prediction.getRiskLevel());
+                dossier.setDatePrediction(LocalDateTime.now());
                 
                 // Sauvegarder le dossier mis à jour
                 dossier = dossierRepository.save(dossier);
@@ -1778,19 +1864,23 @@ public class DossierController {
 
     /**
      * Endpoint dédié pour la prédiction IA d'un dossier
-     * Retourne uniquement le résultat de la prédiction sans modifier le dossier
+     * Calcule la prédiction en tenant compte de toutes les données récentes et met à jour le dossier
      * 
      * @param id ID du dossier
-     * @return Résultat de la prédiction IA (etatFinal, riskScore, riskLevel)
+     * @return Résultat de la prédiction IA (etatFinal, riskScore, riskLevel, datePrediction)
      */
     @PostMapping("/{id}/predict-ia")
     public ResponseEntity<?> predictIaForDossier(@PathVariable Long id) {
+        long startTime = System.currentTimeMillis();
+        
         try {
-            // Récupérer le dossier
+            // 1. Vérifier que le dossier existe
             Dossier dossier = dossierRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Dossier non trouvé avec l'ID: " + id));
 
-            // Récupérer les données associées
+            logger.info("Début du calcul de prédiction IA pour le dossier {}", id);
+
+            // 2. Récupérer toutes les données associées récentes
             Optional<projet.carthagecreance_backend.Entity.Enquette> enqueteOpt = 
                 enquetteRepository.findByDossierId(id);
             List<projet.carthagecreance_backend.Entity.Action> actions = 
@@ -1799,32 +1889,66 @@ public class DossierController {
                 audienceRepository.findByDossierId(id);
             List<projet.carthagecreance_backend.Entity.ActionHuissier> actionsHuissier = 
                 actionHuissierRepository.findByDossierId(id);
+            List<projet.carthagecreance_backend.Entity.DocumentHuissier> documentsHuissier = 
+                documentHuissierRepository.findByDossierId(id);
 
-            // Construire les features à partir des données réelles
+            // 3. Vérifier que le dossier a suffisamment de données pour une prédiction fiable
+            if (dossier.getMontantCreance() == null || dossier.getMontantCreance() <= 0) {
+                logger.warn("Dossier {} n'a pas de montant de créance valide pour la prédiction", id);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Le dossier doit avoir un montant de créance valide pour la prédiction"));
+            }
+
+            // 4. Construire les features à partir des données réelles (incluant les documents huissier)
             Map<String, Object> features = iaFeatureBuilderService.buildFeaturesFromRealData(
                 dossier,
                 enqueteOpt.orElse(null),
                 actions,
                 audiences,
-                actionsHuissier
+                actionsHuissier,
+                documentsHuissier
             );
 
-            // Prédire avec l'IA
+            logger.debug("Features construites pour le dossier {}: {} features", id, features.size());
+
+            // 5. Prédire avec l'IA
             projet.carthagecreance_backend.DTO.IaPredictionResult prediction = 
                 iaPredictionService.predictRisk(features);
 
-            logger.info("Prédiction IA pour le dossier {}: etatFinal={}, riskScore={}, riskLevel={}", 
-                id, prediction.getEtatFinal(), prediction.getRiskScore(), prediction.getRiskLevel());
+            // 6. Mettre à jour le dossier avec les résultats de la prédiction
+            LocalDateTime now = LocalDateTime.now();
+            dossier.setEtatPrediction(
+                projet.carthagecreance_backend.Entity.EtatDossier.valueOf(prediction.getEtatFinal())
+            );
+            dossier.setRiskScore(prediction.getRiskScore());
+            dossier.setRiskLevel(prediction.getRiskLevel());
+            dossier.setDatePrediction(now);
+            
+            // Mettre à jour la datePrediction dans le résultat pour la réponse
+            prediction.setDatePrediction(now);
 
-            // Retourner uniquement le résultat de la prédiction (sans modifier le dossier)
+            // 7. Sauvegarder le dossier mis à jour
+            dossierRepository.save(dossier);
+
+            long duration = System.currentTimeMillis() - startTime;
+            logger.info("Prédiction IA réussie pour le dossier {}: etatFinal={}, riskScore={}, riskLevel={}, durée={}ms", 
+                id, prediction.getEtatFinal(), prediction.getRiskScore(), prediction.getRiskLevel(), duration);
+
+            // 8. Retourner le résultat de la prédiction avec la date
             return ResponseEntity.ok(prediction);
 
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de la prédiction IA pour le dossier {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "Erreur de validation: " + e.getMessage()));
         } catch (RuntimeException e) {
             logger.error("Erreur lors de la prédiction IA pour le dossier {}: {}", id, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            logger.error("Erreur interne lors de la prédiction IA pour le dossier {}: {}", id, e.getMessage(), e);
+            long duration = System.currentTimeMillis() - startTime;
+            logger.error("Erreur interne lors de la prédiction IA pour le dossier {} (durée: {}ms): {}", 
+                id, duration, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Erreur lors de la prédiction IA: " + e.getMessage()));
         }
@@ -1857,6 +1981,317 @@ public class DossierController {
             logger.error("Erreur interne lors de la clôture du dossier {}: {}", dossierId, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "Erreur lors de la clôture: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Finalise un dossier juridique avec l'état final et le montant recouvré
+     * @param dossierId ID du dossier
+     * @param dto DTO contenant l'état final et le montant recouvré
+     * @param authHeader Token d'autorisation
+     * @return Dossier mis à jour
+     */
+    @PutMapping("/{dossierId}/juridique/finaliser")
+    public ResponseEntity<?> finaliserDossierJuridique(
+            @PathVariable Long dossierId,
+            @RequestBody projet.carthagecreance_backend.DTO.FinalisationDossierDTO dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            // Vérifier l'authentification et l'autorisation
+            Utilisateur utilisateur = userExtractionService.extractUserFromToken(authHeader);
+            if (utilisateur == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Non authentifié"));
+            }
+            
+            // Vérifier que l'utilisateur a le rôle CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE
+            if (utilisateur.getRoleUtilisateur() != RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_JURIDIQUE &&
+                utilisateur.getRoleUtilisateur() != RoleUtilisateur.SUPER_ADMIN) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "Accès refusé. Seuls les chefs du département juridique peuvent finaliser un dossier juridique."));
+            }
+            
+            // Récupérer le dossier
+            Optional<Dossier> dossierOpt = dossierRepository.findById(dossierId);
+            if (dossierOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Dossier non trouvé avec l'ID: " + dossierId));
+            }
+            
+            Dossier dossier = dossierOpt.get();
+            
+            // Vérifier que le dossier a au moins une audience
+            List<Audience> audiences = audienceRepository.findByDossierId(dossierId);
+            if (audiences == null || audiences.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Le dossier doit avoir au moins une audience pour être finalisé en juridique"));
+            }
+            
+            // Validation des données
+            if (dto.getEtatFinal() == null || dto.getEtatFinal().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "etatFinal est requis"));
+            }
+            
+            if (dto.getMontantRecouvre() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "montantRecouvre est requis"));
+            }
+            
+            if (dto.getMontantRecouvre().compareTo(BigDecimal.ZERO) < 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "montantRecouvre ne peut pas être négatif"));
+            }
+            
+            // Récupérer le montant déjà recouvré
+            BigDecimal montantDejaRecouvre = dossier.getMontantRecouvre() != null ?
+                    BigDecimal.valueOf(dossier.getMontantRecouvre()) : BigDecimal.ZERO;
+            
+            // Calculer le montant total recouvré
+            BigDecimal montantTotalRecouvre = montantDejaRecouvre.add(dto.getMontantRecouvre());
+            
+            // Validation selon l'état final
+            BigDecimal montantCreance = dossier.getMontantCreance() != null ?
+                    BigDecimal.valueOf(dossier.getMontantCreance()) : BigDecimal.ZERO;
+            
+            String etatFinal = dto.getEtatFinal().toUpperCase();
+            if ("RECOUVREMENT_TOTAL".equals(etatFinal)) {
+                // Vérifier que le montant total recouvré est égal au montant créance (avec tolérance de 0.01)
+                BigDecimal difference = montantTotalRecouvre.subtract(montantCreance).abs();
+                if (difference.compareTo(new BigDecimal("0.01")) > 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("error", 
+                                String.format("Pour RECOUVREMENT_TOTAL, le montant total recouvré (%.2f) doit être égal au montant créance (%.2f)", 
+                                    montantTotalRecouvre.doubleValue(), montantCreance.doubleValue())));
+                }
+            } else if ("RECOUVREMENT_PARTIEL".equals(etatFinal)) {
+                // Vérifier que montant recouvré > 0 et < montant créance
+                if (montantTotalRecouvre.compareTo(BigDecimal.ZERO) <= 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("error", "Pour RECOUVREMENT_PARTIEL, le montant recouvré doit être supérieur à 0"));
+                }
+                if (montantTotalRecouvre.compareTo(montantCreance) >= 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("error", 
+                                String.format("Pour RECOUVREMENT_PARTIEL, le montant total recouvré (%.2f) doit être inférieur au montant créance (%.2f)", 
+                                    montantTotalRecouvre.doubleValue(), montantCreance.doubleValue())));
+                }
+            } else if (!"NON_RECOUVRE".equals(etatFinal)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "etatFinal doit être RECOUVREMENT_TOTAL, RECOUVREMENT_PARTIEL ou NON_RECOUVRE"));
+            }
+            
+            // Vérifier que le montant total recouvré ne dépasse pas le montant créance
+            if (montantTotalRecouvre.compareTo(montantCreance) > 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", 
+                            String.format("Le montant total recouvré (%.2f) ne peut pas dépasser le montant créance (%.2f)", 
+                                montantTotalRecouvre.doubleValue(), montantCreance.doubleValue())));
+            }
+            
+            // ✅ Mettre à jour le montant recouvré phase juridique (mode ADD pour ajouter au montant existant)
+            dossier = dossierMontantService.updateMontantRecouvrePhaseJuridique(
+                    dossierId, 
+                    dto.getMontantRecouvre(), 
+                    projet.carthagecreance_backend.Entity.ModeMiseAJour.ADD,
+                    null, // Pas d'action ID pour la finalisation
+                    utilisateur.getId(),
+                    projet.carthagecreance_backend.Entity.HistoriqueRecouvrement.TypeActionRecouvrement.FINALISATION_JURIDIQUE,
+                    "Finalisation juridique - " + etatFinal
+            );
+            
+            // Mettre à jour l'état du dossier selon etatFinal
+            if ("RECOUVREMENT_TOTAL".equals(etatFinal)) {
+                dossier.setDossierStatus(DossierStatus.CLOTURE);
+                dossier.setEtatDossier(EtatDossier.RECOVERED_TOTAL);
+                if (dossier.getDateCloture() == null) {
+                    dossier.setDateCloture(new Date());
+                }
+            } else if ("RECOUVREMENT_PARTIEL".equals(etatFinal)) {
+                dossier.setEtatDossier(EtatDossier.RECOVERED_PARTIAL);
+            } else if ("NON_RECOUVRE".equals(etatFinal)) {
+                dossier.setEtatDossier(EtatDossier.NOT_RECOVERED);
+            }
+            
+            // Sauvegarder le dossier
+            dossier = dossierRepository.save(dossier);
+            
+            // Recalculer les statistiques
+            try {
+                statistiqueService.recalculerStatistiquesAsync();
+            } catch (Exception e) {
+                logger.warn("Erreur lors du recalcul des statistiques: {}", e.getMessage());
+            }
+            
+            logger.info("Dossier {} finalisé en juridique par {}: etatFinal={}, montantRecouvre={}", 
+                    dossierId, utilisateur.getId(), etatFinal, dto.getMontantRecouvre());
+            
+            // Retourner le dossier mis à jour
+            return ResponseEntity.ok(dossier);
+            
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de la finalisation juridique: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Erreur lors de la finalisation juridique du dossier {}: {}", dossierId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur interne: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Finalise un dossier amiable avec l'état final et le montant recouvré
+     * @param dossierId ID du dossier
+     * @param dto DTO contenant l'état final et le montant recouvré
+     * @param authHeader Token d'autorisation
+     * @return Dossier mis à jour
+     */
+    @PutMapping("/{dossierId}/amiable/finaliser")
+    public ResponseEntity<?> finaliserDossierAmiable(
+            @PathVariable Long dossierId,
+            @RequestBody projet.carthagecreance_backend.DTO.FinalisationDossierDTO dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            // Vérifier l'authentification et l'autorisation
+            Utilisateur utilisateur = userExtractionService.extractUserFromToken(authHeader);
+            if (utilisateur == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "Non authentifié"));
+            }
+            
+            // Vérifier que l'utilisateur a le rôle CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE
+            if (utilisateur.getRoleUtilisateur() != RoleUtilisateur.CHEF_DEPARTEMENT_RECOUVREMENT_AMIABLE &&
+                utilisateur.getRoleUtilisateur() != RoleUtilisateur.SUPER_ADMIN) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "Accès refusé. Seuls les chefs du département amiable peuvent finaliser un dossier amiable."));
+            }
+            
+            // Récupérer le dossier
+            Optional<Dossier> dossierOpt = dossierRepository.findById(dossierId);
+            if (dossierOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "Dossier non trouvé avec l'ID: " + dossierId));
+            }
+            
+            Dossier dossier = dossierOpt.get();
+            
+            // Vérifier que le dossier a au moins une action amiable
+            List<Action> actions = actionRepository.findByDossierId(dossierId);
+            if (actions == null || actions.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "Le dossier doit avoir au moins une action amiable pour être finalisé en amiable"));
+            }
+            
+            // Validation des données
+            if (dto.getEtatFinal() == null || dto.getEtatFinal().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "etatFinal est requis"));
+            }
+            
+            if (dto.getMontantRecouvre() == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "montantRecouvre est requis"));
+            }
+            
+            if (dto.getMontantRecouvre().compareTo(BigDecimal.ZERO) < 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "montantRecouvre ne peut pas être négatif"));
+            }
+            
+            // Récupérer le montant déjà recouvré
+            BigDecimal montantDejaRecouvre = dossier.getMontantRecouvre() != null ?
+                    BigDecimal.valueOf(dossier.getMontantRecouvre()) : BigDecimal.ZERO;
+            
+            // Calculer le montant total recouvré
+            BigDecimal montantTotalRecouvre = montantDejaRecouvre.add(dto.getMontantRecouvre());
+            
+            // Validation selon l'état final
+            BigDecimal montantCreance = dossier.getMontantCreance() != null ?
+                    BigDecimal.valueOf(dossier.getMontantCreance()) : BigDecimal.ZERO;
+            
+            String etatFinal = dto.getEtatFinal().toUpperCase();
+            if ("RECOUVREMENT_TOTAL".equals(etatFinal)) {
+                // Vérifier que le montant total recouvré est égal au montant créance (avec tolérance de 0.01)
+                BigDecimal difference = montantTotalRecouvre.subtract(montantCreance).abs();
+                if (difference.compareTo(new BigDecimal("0.01")) > 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("error", 
+                                String.format("Pour RECOUVREMENT_TOTAL, le montant total recouvré (%.2f) doit être égal au montant créance (%.2f)", 
+                                    montantTotalRecouvre.doubleValue(), montantCreance.doubleValue())));
+                }
+            } else if ("RECOUVREMENT_PARTIEL".equals(etatFinal)) {
+                // Vérifier que montant recouvré > 0 et < montant créance
+                if (montantTotalRecouvre.compareTo(BigDecimal.ZERO) <= 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("error", "Pour RECOUVREMENT_PARTIEL, le montant recouvré doit être supérieur à 0"));
+                }
+                if (montantTotalRecouvre.compareTo(montantCreance) >= 0) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of("error", 
+                                String.format("Pour RECOUVREMENT_PARTIEL, le montant total recouvré (%.2f) doit être inférieur au montant créance (%.2f)", 
+                                    montantTotalRecouvre.doubleValue(), montantCreance.doubleValue())));
+                }
+            } else if (!"NON_RECOUVRE".equals(etatFinal)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", "etatFinal doit être RECOUVREMENT_TOTAL, RECOUVREMENT_PARTIEL ou NON_RECOUVRE"));
+            }
+            
+            // Vérifier que le montant total recouvré ne dépasse pas le montant créance
+            if (montantTotalRecouvre.compareTo(montantCreance) > 0) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Map.of("error", 
+                            String.format("Le montant total recouvré (%.2f) ne peut pas dépasser le montant créance (%.2f)", 
+                                montantTotalRecouvre.doubleValue(), montantCreance.doubleValue())));
+            }
+            
+            // ✅ Mettre à jour le montant recouvré phase amiable (mode ADD pour ajouter au montant existant)
+            dossier = dossierMontantService.updateMontantRecouvrePhaseAmiable(
+                    dossierId, 
+                    dto.getMontantRecouvre(), 
+                    projet.carthagecreance_backend.Entity.ModeMiseAJour.ADD,
+                    null, // Pas d'action ID pour la finalisation
+                    utilisateur.getId(),
+                    "Finalisation amiable - " + etatFinal
+            );
+            
+            // Mettre à jour l'état du dossier selon etatFinal
+            if ("RECOUVREMENT_TOTAL".equals(etatFinal)) {
+                dossier.setDossierStatus(DossierStatus.CLOTURE);
+                dossier.setEtatDossier(EtatDossier.RECOVERED_TOTAL);
+                if (dossier.getDateCloture() == null) {
+                    dossier.setDateCloture(new Date());
+                }
+            } else if ("RECOUVREMENT_PARTIEL".equals(etatFinal)) {
+                dossier.setEtatDossier(EtatDossier.RECOVERED_PARTIAL);
+            } else if ("NON_RECOUVRE".equals(etatFinal)) {
+                dossier.setEtatDossier(EtatDossier.NOT_RECOVERED);
+            }
+            
+            // Sauvegarder le dossier
+            dossier = dossierRepository.save(dossier);
+            
+            // Recalculer les statistiques
+            try {
+                statistiqueService.recalculerStatistiquesAsync();
+            } catch (Exception e) {
+                logger.warn("Erreur lors du recalcul des statistiques: {}", e.getMessage());
+            }
+            
+            logger.info("Dossier {} finalisé en amiable par {}: etatFinal={}, montantRecouvre={}", 
+                    dossierId, utilisateur.getId(), etatFinal, dto.getMontantRecouvre());
+            
+            // Retourner le dossier mis à jour
+            return ResponseEntity.ok(dossier);
+            
+        } catch (IllegalArgumentException e) {
+            logger.error("Erreur de validation lors de la finalisation amiable: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Erreur lors de la finalisation amiable du dossier {}: {}", dossierId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Erreur interne: " + e.getMessage()));
         }
     }
 }

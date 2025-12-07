@@ -36,6 +36,12 @@ public interface TarifDossierRepository extends JpaRepository<TarifDossier, Long
     @Query("SELECT t FROM TarifDossier t WHERE t.dossier.id = :dossierId AND t.audience.id = :audienceId")
     Optional<TarifDossier> findByDossierIdAndAudienceId(@Param("dossierId") Long dossierId, @Param("audienceId") Long audienceId);
     
+    @Query("SELECT t FROM TarifDossier t WHERE t.dossier.id = :dossierId AND t.audience.id = :audienceId AND t.categorie = :categorie")
+    Optional<TarifDossier> findByDossierIdAndAudienceIdAndCategorie(
+        @Param("dossierId") Long dossierId, 
+        @Param("audienceId") Long audienceId,
+        @Param("categorie") String categorie);
+    
     @Query("SELECT t FROM TarifDossier t WHERE t.dossier.id = :dossierId AND t.enquete.id = :enqueteId")
     Optional<TarifDossier> findByDossierIdAndEnqueteId(@Param("dossierId") Long dossierId, @Param("enqueteId") Long enqueteId);
 }

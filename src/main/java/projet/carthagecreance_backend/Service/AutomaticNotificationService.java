@@ -1,6 +1,7 @@
 package projet.carthagecreance_backend.Service;
 
 import projet.carthagecreance_backend.Entity.*;
+import java.util.List;
 
 /**
  * Service pour la gestion des notifications automatiques
@@ -73,5 +74,90 @@ public interface AutomaticNotificationService {
      * Cette méthode doit être appelée périodiquement (par exemple via un scheduler)
      */
     void verifierEtNotifierAudiencesProchaines();
+    
+    /**
+     * Crée une notification lors de la création d'un utilisateur
+     * @param utilisateur L'utilisateur créé
+     * @param createur L'utilisateur qui a créé le compte (SuperAdmin ou Chef)
+     */
+    void notifierCreationUtilisateur(Utilisateur utilisateur, Utilisateur createur);
+    
+    /**
+     * Crée une notification lors de l'affectation d'un utilisateur à un département
+     * @param utilisateur L'utilisateur affecté
+     * @param chef Le chef du département
+     */
+    void notifierAffectationUtilisateur(Utilisateur utilisateur, Utilisateur chef);
+    
+    /**
+     * Notifie la création d'un document huissier (fusionné depuis NotificationHuissier)
+     * @param document Le document créé
+     * @param dossier Le dossier concerné
+     */
+    void notifierCreationDocumentHuissier(DocumentHuissier document, Dossier dossier);
+    
+    /**
+     * Notifie l'expiration d'un document huissier (fusionné depuis NotificationHuissier)
+     * @param document Le document expiré
+     * @param dossier Le dossier concerné
+     */
+    void notifierExpirationDocumentHuissier(DocumentHuissier document, Dossier dossier);
+    
+    /**
+     * Notifie qu'une action huissier a été effectuée (fusionné depuis NotificationHuissier)
+     * @param action L'action effectuée
+     * @param dossier Le dossier concerné
+     */
+    void notifierActionHuissierEffectuee(ActionHuissier action, Dossier dossier);
+    
+    /**
+     * Envoie une notification hiérarchique (SuperAdmin → Chef → Agent)
+     * @param expediteur L'utilisateur qui envoie la notification
+     * @param destinataires Liste des IDs des destinataires
+     * @param type Type de notification
+     * @param titre Titre de la notification
+     * @param message Message de la notification
+     * @param entiteId ID de l'entité concernée
+     * @param entiteType Type d'entité
+     */
+    void envoyerNotificationHierarchique(Utilisateur expediteur, List<Long> destinataires, 
+                                         TypeNotification type, String titre, String message,
+                                         Long entiteId, TypeEntite entiteType);
+    
+    /**
+     * Envoie une notification d'un SuperAdmin vers un Chef
+     * @param chef Le chef destinataire
+     * @param type Type de notification
+     * @param titre Titre
+     * @param message Message
+     * @param entiteId ID entité
+     * @param entiteType Type entité
+     */
+    void notifierSuperAdminVersChef(Utilisateur chef, TypeNotification type, String titre, 
+                                    String message, Long entiteId, TypeEntite entiteType);
+    
+    /**
+     * Envoie une notification d'un SuperAdmin vers un Agent
+     * @param agent L'agent destinataire
+     * @param type Type de notification
+     * @param titre Titre
+     * @param message Message
+     * @param entiteId ID entité
+     * @param entiteType Type entité
+     */
+    void notifierSuperAdminVersAgent(Utilisateur agent, TypeNotification type, String titre, 
+                                    String message, Long entiteId, TypeEntite entiteType);
+    
+    /**
+     * Envoie une notification d'un Chef vers ses Agents
+     * @param chef Le chef expéditeur
+     * @param type Type de notification
+     * @param titre Titre
+     * @param message Message
+     * @param entiteId ID entité
+     * @param entiteType Type entité
+     */
+    void notifierChefVersAgents(Utilisateur chef, TypeNotification type, String titre, 
+                               String message, Long entiteId, TypeEntite entiteType);
 }
 

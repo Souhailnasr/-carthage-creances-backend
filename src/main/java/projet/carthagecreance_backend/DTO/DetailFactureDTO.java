@@ -26,6 +26,7 @@ public class DetailFactureDTO {
     // Commissions (selon annexe)
     private BigDecimal commissionAmiable;
     private BigDecimal commissionJuridique;
+    private BigDecimal commissionInterets;  // ✅ NOUVEAU : Commission sur intérêts (50%)
     
     // Totaux
     private BigDecimal totalHT;

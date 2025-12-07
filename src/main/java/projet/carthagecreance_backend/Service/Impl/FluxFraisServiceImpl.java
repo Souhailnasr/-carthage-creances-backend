@@ -49,6 +49,9 @@ public class FluxFraisServiceImpl implements FluxFraisService {
 
     @Autowired
     private TarifCatalogueService tarifCatalogueService;
+    
+    @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
 
     @Override
     public FluxFrais createFluxFrais(FluxFraisDTO dto) {
@@ -197,7 +200,16 @@ public class FluxFraisServiceImpl implements FluxFraisService {
             fluxFrais.setCommentaire(dto.getCommentaire());
         }
 
-        return fluxFraisRepository.save(fluxFrais);
+        FluxFrais savedFluxFrais = fluxFraisRepository.save(fluxFrais);
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après validation de frais: {}", e.getMessage());
+        }
+        
+        return savedFluxFrais;
     }
 
     @Override

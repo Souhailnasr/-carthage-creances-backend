@@ -25,5 +25,6 @@ public class ActionHuissierDTO {
     private String pieceJointeUrl;
     private String huissierName;
     private ModeMiseAJour updateMode; // ADD ou SET
+    private Long utilisateurId; // ✅ NOUVEAU : Pour la traçabilité
 }
 

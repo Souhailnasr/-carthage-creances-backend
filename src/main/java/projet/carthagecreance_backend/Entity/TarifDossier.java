@@ -12,7 +12,11 @@ import java.time.LocalDateTime;
  * Entité pour gérer les tarifs spécifiques par dossier avec validation
  */
 @Entity
-@Table(name = "tarif_dossier")
+@Table(name = "tarif_dossier", 
+       uniqueConstraints = {
+           @UniqueConstraint(columnNames = {"audience_id", "categorie"}, 
+                            name = "uk_tarif_audience_categorie")
+       })
 @Getter
 @Setter
 @NoArgsConstructor

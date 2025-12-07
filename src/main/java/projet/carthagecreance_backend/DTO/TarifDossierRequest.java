@@ -27,6 +27,7 @@ public class TarifDossierRequest {
     private Long documentHuissierId;
     private Long actionHuissierId;
     private Long audienceId;
+    private Long avocatId;  // Pour les honoraires d'avocat (sera mappé vers audienceId)
     private Long actionId;
     private Long enqueteId;
 }

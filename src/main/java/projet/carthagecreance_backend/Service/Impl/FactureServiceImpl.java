@@ -36,6 +36,9 @@ public class FactureServiceImpl implements FactureService {
     private TarifDossierRepository tarifDossierRepository;
     
     @Autowired
+    private projet.carthagecreance_backend.Service.StatistiqueService statistiqueService;
+    
+    @Autowired
     private PaiementRepository paiementRepository;
 
     @Override
@@ -147,6 +150,13 @@ public class FactureServiceImpl implements FactureService {
         facture.setMontantTTC(calculerMontantTTC(montantHT, TAUX_TVA_DEFAULT));
 
         facture = factureRepository.save(facture);
+        
+        // Recalcul automatique des statistiques (asynchrone)
+        try {
+            statistiqueService.recalculerStatistiquesAsync();
+        } catch (Exception e) {
+            logger.warn("Erreur lors du recalcul automatique des statistiques après génération de facture automatique: {}", e.getMessage());
+        }
 
         // ✅ Note : Les TarifDossier ne sont pas modifiés car ils restent liés au dossier
         // Le statut de validation dans Finance sera mis à jour par TarifDossierServiceImpl
